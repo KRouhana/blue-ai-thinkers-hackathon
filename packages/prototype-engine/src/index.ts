@@ -136,7 +136,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       child.on('message', acknowledge);
       child.send({ kind: 'invalidate', operationId }, e => { if (e) { clearTimeout(timer); child.off('message', acknowledge); reject(e); } });
     });
-    w.check = await this.verifier.check(w.url, w.meta, signal, patch, operationId === 'prepare' && w.state.mode === 'blank_template' && w.state.revision.source === 0);
+    w.check = await this.verifier.check(w.url, w.meta, signal, patch);
     if (w.check.compile === 'passed' && w.check.page === 'rendered') this.emit(w, operationId, 'preview', 'Preview compiled and rendered.', { revision: w.state.revision });
     else this.emit(w, operationId, 'error', w.check.diagnostics.join('\n'));
     return w.check;
