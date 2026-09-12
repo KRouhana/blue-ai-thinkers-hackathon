@@ -58,12 +58,29 @@ npm run verify   # typecheck, then tests, then a production build
 
 Fixture mode never touches a microphone, a model, or the internet. To run the real thing you'd
 plug in, per piece: a model API key for the orchestrator's planner, an OpenAI + Recall.ai key pair
-for live meeting audio, a Codex login for the prototype engine, and a Slack app + Recall.ai bot for
-posting into Slack and joining a Google Meet call. Each piece's own README covers exactly what to
-set and how to check it's working: [`packages/perception`](packages/perception/README.md),
-[`apps/api`](apps/api/README.md), [`packages/prototype-engine`](packages/prototype-engine/README.md),
+for live meeting audio, and a Codex login for the prototype engine.
+
+Joining an actual Google Meet call works like this: you give the bot the real meeting URL on the
+command line —
+
+```sh
+npm run meetbot -- --url https://meet.google.com/xxx-yyyy-zzz --presenter-url "https://<tunnel>/?session=<id>"
+```
+
+— and it joins that specific call as a guest named **Fork**, showing the live prototype as its
+camera feed (via [Recall.ai](https://recall.ai)'s meeting-bot API, since Google Meet has no public
+API for a bot to join as a real participant). **The host still has to manually admit it**, exactly
+like any unrecognized guest — there's no SSO, invite link, or bypass that lets it in
+automatically. It also needs a public HTTPS tunnel in front of the local meeting view, since
+Recall's cloud bot can't reach `127.0.0.1` directly. Optionally it can also stream the meeting's
+audio back into the transcription pipeline, with more credentials.
+
+Each piece's own README covers exactly what to set and how to check it's working:
+[`packages/perception`](packages/perception/README.md), [`apps/api`](apps/api/README.md),
+[`packages/prototype-engine`](packages/prototype-engine/README.md),
 [`apps/channel`](apps/channel/README.md), [`apps/meet-bot`](apps/meet-bot/README.md). None of these
-fall back to a fixture silently — a missing credential fails loudly instead of faking success.
+fall back to a fixture silently — a missing credential fails loudly instead of faking success, and
+none of this has been run end-to-end against a real Meet call or Slack workspace in this checkout.
 
 ## Tech
 
