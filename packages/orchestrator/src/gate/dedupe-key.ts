@@ -11,7 +11,10 @@ function actionFingerprint(proposal: PlannerProposal): unknown {
       return ['undo', proposal.experimentId];
     case 'clarify':
       return ['clarify', [...proposal.candidates.map((candidate) => candidate.id)].sort()];
-    default:
+    // Listed rather than defaulted, so a new proposal kind is a compile error here.
+    case 'observe':
+    case 'hold':
+    case 'pause':
       return [proposal.kind];
   }
 }

@@ -33,7 +33,7 @@ test('applyPatch enforces expected revision and bumps config; undo restores via 
   assert.deepEqual(ok.revision, { source: 1, config: 1 });
   assert.ok(ok.checkpointId);
   const undone = await engine.undo({
-    operationId: 'op3', workspaceId: 'demo-1', expectedRevision: { source: 1, config: 1 }, checkpointId: ok.checkpointId!,
+    operationId: 'op3', workspaceId: 'demo-1', expectedRevision: { source: 1, config: 1 }, checkpointId: ok.checkpointId,
   });
   assert.equal(undone.applied, true);
   assert.deepEqual(undone.revision, { source: 1, config: 2 });

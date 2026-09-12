@@ -23,7 +23,8 @@ export class SettleWindow {
       this.timers = without(this.timers, sessionId);
       void this.run(sessionId);
     }, this.settleMs);
-    timer.unref?.();
+    // A pending settle must never hold the process open.
+    timer.unref();
     this.timers = new Map(this.timers).set(sessionId, timer);
   }
 

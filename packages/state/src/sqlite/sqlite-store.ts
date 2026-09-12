@@ -52,7 +52,7 @@ export class SqliteStateStore implements StateStore {
     return (this.db.prepare(sql).get(params) as Row | undefined) ?? null;
   }
   private many(sql: string, params: Params): Row[] {
-    return this.db.prepare(sql).all(params) as Row[];
+    return this.db.prepare(sql).all(params);
   }
   private newestLast(sql: string, params: Params): Row[] {
     return this.many(sql, params).reverse();

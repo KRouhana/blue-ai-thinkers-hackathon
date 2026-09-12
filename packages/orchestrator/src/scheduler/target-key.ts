@@ -14,7 +14,11 @@ export function targetKeyFor(
       return `job:${workspaceId ?? 'none'}`;
     case 'undo':
       return experiments.find((experiment) => experiment.id === proposal.experimentId)?.targetKey ?? `undo:${proposal.experimentId}`;
-    default:
+    // Listed rather than defaulted, so a new proposal kind is a compile error here.
+    case 'observe':
+    case 'hold':
+    case 'clarify':
+    case 'pause':
       return `none:${proposal.kind}`;
   }
 }

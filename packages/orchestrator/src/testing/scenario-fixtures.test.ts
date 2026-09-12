@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { loadScenarioFixtures, retargetObservation, SCENARIOS_PATH } from './scenario-fixtures';
 
 const jsonIds = (JSON.parse(readFileSync(SCENARIOS_PATH, 'utf8')) as Array<{ id: string }>).map((entry) => entry.id);

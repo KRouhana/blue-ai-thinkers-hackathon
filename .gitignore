@@ -1,9 +1,27 @@
+# Superset of the starter kit's ignores, so D's root merge is a no-op.
 node_modules/
+dist/
+.turbo/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# Secrets: only .env.example is tracked.
 .env
+.env.*
+!.env.example
+
+# Local state and build output
 .data/
+coverage/
+*.log
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
-coverage/
+
+# Editors and OS
 .DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

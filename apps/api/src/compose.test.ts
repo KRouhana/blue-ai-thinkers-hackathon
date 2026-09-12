@@ -39,7 +39,7 @@ test('the composed app serves the health check with the wired labels', async () 
   const composed = compose(baseEnv(), silentLogger);
   const response = await composed.app.request('/healthz');
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()) as unknown, { ok: true, data: { planner: 'fixture', engine: 'FIXTURE' } });
+  assert.deepEqual((await response.json()), { ok: true, data: { planner: 'fixture', engine: 'FIXTURE' } });
   composed.orchestrator.dispose();
   composed.store.close();
 });

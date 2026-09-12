@@ -51,7 +51,7 @@ test('the stream opens with the current snapshot before any replay', async () =>
   const frames = await readFrames(response, 1);
   assert.equal(frames[0]?.event, 'snapshot');
   assert.equal(frames[0]?.id, null, 'the opening snapshot must not move the client cursor');
-  const payload = JSON.parse(frames[0]!.data) as { kind: string; snapshot: SessionSnapshot };
+  const payload = JSON.parse(frames[0].data) as { kind: string; snapshot: SessionSnapshot };
   assert.equal(payload.snapshot.id, sessionId);
   harness.close();
 });

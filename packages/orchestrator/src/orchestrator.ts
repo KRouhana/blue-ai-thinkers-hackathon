@@ -121,13 +121,14 @@ export function createOrchestrator(deps: OrchestratorDeps): Orchestrator {
         return;
       }
       const selection = context.selection;
-      const chosen = selection && clarification.candidates.some((candidate) => candidate.id === selection.elementId);
-      if (chosen && selection && new Date(selection.at).getTime() > new Date(clarification.createdAt).getTime()) {
-        try {
-          resolveClarification(runtime, sessionId, clarification.intentId, selection.elementId);
-        } catch (error) {
-          logger.info('a selection did not resolve the pending question', { sessionId, error: String(error) });
-        }
+      if (!selection) continue;
+      const isCandidate = clarification.candidates.some((candidate) => candidate.id === selection.elementId);
+      const afterTheQuestion = new Date(selection.at).getTime() > new Date(clarification.createdAt).getTime();
+      if (!isCandidate || !afterTheQuestion) continue;
+      try {
+        resolveClarification(runtime, sessionId, clarification.intentId, selection.elementId);
+      } catch (error) {
+        logger.info('a selection did not resolve the pending question', { sessionId, error: String(error) });
       }
     }
   };

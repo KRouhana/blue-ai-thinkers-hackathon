@@ -40,7 +40,7 @@ function intentBase(output: PlannerOutput, ids: ProposalIds): Omit<PlannerPropos
     sourceObservationIds: ids.sourceObservationIds,
     expectedRevision: ids.expectedRevision,
     summary: trim(output.summary.trim() || DEFAULT_SUMMARY[output.kind], 200),
-  } as Omit<PlannerProposal, 'kind'> & { summary: string };
+  };
 }
 
 function holdFor(output: PlannerOutput, ids: ProposalIds, reason: string): ConversionResult {

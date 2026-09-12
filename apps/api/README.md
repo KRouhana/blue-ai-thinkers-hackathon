@@ -131,6 +131,32 @@ clarification answer. Show the `/healthz` labels as badges — a `FIXTURE` run m
 Root `package.json` / `tsconfig.base.json` here are deliberately minimal; merge them into the
 starter root and keep `packages/*` and `apps/*` in `workspaces`.
 
+## Tooling
+
+```bash
+npm run verify      # lint → typecheck → tests → fixture replay (what CI runs)
+npm run lint        # eslint, type-aware
+npm run lint:fix
+npm run test:coverage
+```
+
+The starter kit ships no linter, formatter, or CI, so these are net-new and deliberately scoped:
+
+- **ESLint** (`eslint.config.js`) is flat-config and `files`-scoped to Track B's directories, so it
+  cannot fail or reformat a teammate's code. It runs type-aware rules that catch real bugs in a
+  codebase that is almost entirely async scheduling: `no-floating-promises`, `no-misused-promises`,
+  `switch-exhaustiveness-check` (a new `PlannerProposal` kind becomes a compile error rather than
+  falling into a `default`), plus `no-explicit-any` and `no-console` outside the logger. D can widen
+  `files` during root integration.
+- **No Prettier, on purpose.** Applying it reformats 68 files by **+3,555/−712 lines** — it explodes
+  the deliberately dense schema and scenario-fixture tables that are easier to read compact, and
+  `objectWrap: "preserve"` does not meaningfully reduce that. `.editorconfig` prevents the
+  whitespace drift that actually matters (indent, EOL, final newline, trailing space). If the team
+  later wants Prettier, it should land as one root-wide commit that D owns, not inside a feature
+  branch.
+- **CI** (`.github/workflows/verify.yml`) runs exactly `npm run verify` on Node 22.x with no
+  credentials, so a green build proves the fixture pipeline and nothing more.
+
 ## Scenario replay
 
 ```bash

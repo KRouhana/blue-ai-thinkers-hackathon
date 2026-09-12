@@ -211,18 +211,18 @@ test('ambiguity asks one silent question, and the host answer applies the pendin
 
   const clarification = harness.orchestrator.getSnapshot(snapshot.id)?.clarification;
   assert.ok(clarification, 'expected a pending clarification');
-  assert.deepEqual(clarification!.candidates.map((candidate) => candidate.id), ['start-trial', 'explore-sample']);
+  assert.deepEqual(clarification.candidates.map((candidate) => candidate.id), ['start-trial', 'explore-sample']);
   assert.ok(harness.payloads.some((payload) => payload.kind === 'clarification'));
   assert.equal(visibleExperiments(harness.store, snapshot.id).length, 0);
 
-  await harness.orchestrator.applyControl(snapshot.id, { kind: 'clarification_answer', intentId: clarification!.intentId, candidateId: 'explore-sample' });
+  await harness.orchestrator.applyControl(snapshot.id, { kind: 'clarification_answer', intentId: clarification.intentId, candidateId: 'explore-sample' });
   await harness.orchestrator.flush(snapshot.id);
 
   assert.deepEqual(harness.engine.appliedPatches(), [{ kind: 'set_size', elementId: 'explore-sample', value: 'lg' }]);
   assert.equal(harness.orchestrator.getSnapshot(snapshot.id)?.clarification, null);
 
   await assert.rejects(
-    harness.orchestrator.applyControl(snapshot.id, { kind: 'clarification_answer', intentId: clarification!.intentId, candidateId: 'start-trial' }),
+    harness.orchestrator.applyControl(snapshot.id, { kind: 'clarification_answer', intentId: clarification.intentId, candidateId: 'start-trial' }),
     (error: unknown) => error instanceof OrchestratorError && error.status === 409,
   );
   assert.equal(harness.engine.appliedPatches().length, 1);
