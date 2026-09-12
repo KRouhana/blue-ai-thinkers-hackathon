@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assetsRoot } from './runtime.js';
 
-const args = JSON.parse(process.argv[2]) as { source: string; meta: string; port: number; dependencyRoot: string };
+const args = JSON.parse(process.argv[2]) as { source: string; meta: string; port: number; dependencyRoot: string; collectorPath?: string };
 const bridge = await readFile(path.join(assetsRoot, 'bridge.js'), 'utf8');
+const collector = args.collectorPath ? await readFile(args.collectorPath, 'utf8') : undefined;
 const metadata = JSON.parse(await readFile(args.meta, 'utf8')) as { hostOrigin: string };
 const vite = await createServer({
   root: args.source,
@@ -20,18 +21,22 @@ const vite = await createServer({
   },
   plugins: [{
     name: 'fork-preview-bridge',
-    transformIndexHtml: () => [{ tag: 'script', attrs: { type: 'module', src: '/__fork/bridge.js' }, injectTo: 'head' }],
+    transformIndexHtml: () => [
+      { tag: 'script', attrs: { type: 'module', src: '/__fork/bridge.js' }, injectTo: 'head' as const },
+      ...(collector ? [{ tag: 'script', attrs: { type: 'module', src: '/__fork/collector.js' }, injectTo: 'head' as const }] : []),
+    ],
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         response.setHeader('X-Content-Type-Options', 'nosniff');
         response.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:${args.port}; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${metadata.hostOrigin}`);
         if (request.method !== 'GET' && request.method !== 'HEAD') { response.statusCode = 405; response.end(); return; }
         const pathname = request.url?.split('?')[0];
-        if (pathname !== '/__fork/meta' && pathname !== '/__fork/bridge.js') { next(); return; }
+        if (pathname !== '/__fork/meta' && pathname !== '/__fork/bridge.js' && pathname !== '/__fork/collector.js') { next(); return; }
         response.setHeader('Cache-Control', 'no-store');
         try {
           response.setHeader('Content-Type', pathname.endsWith('.js') ? 'text/javascript' : 'application/json');
-          response.end(pathname.endsWith('.js') ? bridge : await readFile(args.meta, 'utf8'));
+          if (pathname === '/__fork/collector.js' && !collector) { response.statusCode = 404; response.end(); return; }
+          response.end(pathname === '/__fork/bridge.js' ? bridge : pathname === '/__fork/collector.js' ? collector : await readFile(args.meta, 'utf8'));
         } catch { response.statusCode = 503; response.end(); }
       });
     },

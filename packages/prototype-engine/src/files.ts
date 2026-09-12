@@ -5,6 +5,7 @@ import { error, type Manifest } from './types.js';
 
 const excluded = new Set(['node_modules', '.git', '.codex', '.agents', '.fork-cache', 'dist', 'build', '.next', 'coverage']);
 const secret = /^(?:\.env(?:\..*)?|\.npmrc|\.netrc|\.pypirc|credentials.*|auth\.json|id_rsa.*|id_ed25519.*)$|\.(?:pem|key|p12|pfx)$/i;
+const credentialContent = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:gh[pousr]_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{25,}|xox[baprs]-[A-Za-z0-9-]{20,})/;
 export const digest = (value: unknown): string => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const id = (): string => randomUUID();
 export function validId(value: string): void { if (typeof value !== 'string' || !/^[\w-]{1,128}$/.test(value)) throw error('INVALID_ID', 'IDs must contain only letters, numbers, underscores, and hyphens.'); }
@@ -40,7 +41,12 @@ export async function scan(root: string, onboarding = false): Promise<{ manifest
       else {
         bytes += info.size;
         if (info.size > 2_000_000 || bytes > 40_000_000 || Object.keys(manifest).length >= 3000) throw error('PROJECT_TOO_LARGE', 'Initial support is limited to 3000 source files, 2 MB per file, and 40 MB total.');
-        manifest[relative] = { hash: createHash('sha256').update(await readFile(full)).digest('hex'), mode: info.mode & 0o777 };
+        const content = await readFile(full);
+        if (credentialContent.test(content.toString('utf8'))) {
+          if (!onboarding) throw error('SENSITIVE_FILE', `Credential-like content detected in ${relative}.`);
+          skipped.push(relative); continue;
+        }
+        manifest[relative] = { hash: createHash('sha256').update(content).digest('hex'), mode: info.mode & 0o777 };
       }
     }
   }

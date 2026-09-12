@@ -1,6 +1,4 @@
 import { cp, mkdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-const root = fileURLToPath(new URL('../../../', import.meta.url));
 const destination = new URL('../dist/assets/', import.meta.url);
 await mkdir(destination, { recursive: true });
 await cp(new URL('../../../fixtures/demo-product/', import.meta.url), new URL('template/', destination), { recursive: true, filter: path => !path.includes('node_modules') });

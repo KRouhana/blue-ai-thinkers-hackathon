@@ -16,7 +16,7 @@ const engine = await createPrototypeEngine({ ...config, onEvent: event => send('
 let current: Awaited<ReturnType<typeof engine.prepare>> | undefined;
 let closing = false;
 let activeJob: string | undefined;
-send('help', { commands: ['prepare [projectId] [sessionId]', 'job <change>', 'patch <elementId> <size: sm|md|lg|xl>', 'undo', 'cancel', 'status', 'diff', 'quit'], note: 'Real local Codex execution. JSON lines on stdout. No B queue, HTTP mutation API, or simulated results.' });
+send('help', { commands: ['prepare [projectId] [sessionId]', 'job <change>', 'patch <elementId> <size: sm|md|lg|xl>', 'undo', 'cancel', 'status', 'diff', 'request <JSON method/params>', 'quit'], note: 'Real local Codex execution. JSON lines on stdout. No B queue, HTTP mutation API, or simulated results.' });
 const input = createInterface({ input: process.stdin, terminal: false });
 async function close() {
   if (closing) return;
@@ -27,6 +27,20 @@ async function command(line: string) {
   const [name, ...parts] = line.trim().split(/\s+/);
   try {
     if (name === 'quit') { await close(); return; }
+    if (name === 'request') {
+      const request = JSON.parse(line.trim().slice('request '.length));
+      let result: unknown;
+      switch (request.method) {
+        case 'prepare': result = await engine.prepare(request.params); break;
+        case 'applyPatch': result = await engine.applyPatch(request.params); break;
+        case 'undo': result = await engine.undo(request.params); break;
+        case 'runJob': result = await engine.runJob(request.params, event => send('progress', event)); break;
+        case 'cancel': result = await engine.cancel(request.params.jobId); break;
+        case 'getWorkspace': result = engine.getWorkspace(request.params.workspaceId); break;
+        default: throw new Error('Unsupported adapter method.');
+      }
+      send('response', { requestId: request.requestId, result }); return;
+    }
     if (name === 'cancel') { send('cancel', activeJob ? await engine.cancel(activeJob) : { accepted: false }); return; }
     if (name === 'prepare') {
       const projectId = parts[0] ?? config.projects[0].id;
@@ -41,6 +55,7 @@ async function command(line: string) {
       send('diff', await engine.getChanges(current.workspaceId, details.lastCheckpointId)); return;
     }
     if (name === 'job') {
+      if (activeJob) throw new Error('A local job is already running. Cancel it or wait.');
       const jobId = randomUUID(); activeJob = jobId;
       const job: PrototypeJob = { id: jobId, experimentId: randomUUID(), sessionId: parts.length ? (await getSession()) : '', workspaceId: current.workspaceId, intentId: randomUUID(), expectedRevision: details.revision, brief: parts.join(' '), relevantSources: [], constraints: [], mockedIntegrations: [], mode: 'demo_only', verification: 'compile_and_render' };
       try { send('result', await engine.runJob(job, event => send('progress', event))); } finally { activeJob = undefined; }

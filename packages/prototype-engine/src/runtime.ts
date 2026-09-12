@@ -24,7 +24,8 @@ export async function findCodex(override?: string): Promise<string> {
 export async function readableRuntimePaths(dependencyRoot: string): Promise<string[]> {
   const paths = [process.execPath, path.dirname(path.dirname(process.execPath)), builtRoot, path.join(packageRoot, 'node_modules'), dependencyRoot];
   // Homebrew Node links its runtime libraries from versioned Cellar packages.
-  try { paths.push(await realpath('/opt/homebrew/Cellar')); } catch { /* nvm/system Node does not need Homebrew. */ }
+  try { paths.push(await realpath('/opt/homebrew/Cellar'), '/opt/homebrew/opt'); } catch { /* nvm/system Node does not need Homebrew. */ }
+  try { paths.push(await realpath('/opt/homebrew/etc/openssl@3/openssl.cnf')); } catch { /* Optional Homebrew OpenSSL runtime configuration. */ }
   return [...new Set(await Promise.all(paths.map(p => realpath(p))))];
 }
 export function profileOverride(source: string, readable: string[]): string {
@@ -59,7 +60,7 @@ export function spawnWorker(file: string, cwd: string, temp: string): ChildProce
 }
 
 /** Seatbelt also contains the generated Vite code; it may listen only on its assigned loopback port. */
-export async function spawnPreview(args: { source: string; meta: string; temp: string; readable: string[]; port: number; dependencyRoot: string }): Promise<ChildProcess> {
+export async function spawnPreview(args: { source: string; meta: string; temp: string; readable: string[]; port: number; dependencyRoot: string; collectorPath?: string }): Promise<ChildProcess> {
   if (process.platform !== 'darwin') throw error('UNSUPPORTED_HOST', 'The initial preview isolation profile supports macOS only.');
   const quote = (s: string) => JSON.stringify(s);
   const profile = `(version 1)
@@ -67,8 +68,9 @@ export async function spawnPreview(args: { source: string; meta: string; temp: s
 (allow process-exec process-fork sysctl-read mach-lookup)
 (allow signal (target self))
 (allow file-read-metadata)
+(allow file-read* (literal "/"))
 (allow file-read* (subpath "/System") (subpath "/usr") (subpath "/bin") (subpath "/sbin") (subpath "/dev") (subpath "/private/etc") (subpath "/Library/Apple"))
-(allow file-read* ${[args.source, args.meta, ...args.readable].map(p => `(subpath ${quote(p)})`).join(' ')})
+(allow file-read* ${[args.source, args.meta, ...(args.collectorPath ? [args.collectorPath] : []), ...args.readable].map(p => `(subpath ${quote(p)})`).join(' ')})
 (allow file-write* (subpath ${quote(path.join(args.source, '.fork-cache'))}) (subpath ${quote(args.temp)}) (literal "/dev/null"))
 (allow network-bind (local ip "localhost:${args.port}"))
 (allow network-inbound (local ip "localhost:${args.port}"))

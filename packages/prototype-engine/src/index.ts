@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
 import type { ChildProcess } from 'node:child_process';
+import type { PreviewPatch } from './types.js';
 import { PreviewVerifier } from './browser.js';
 import { canonical, changedFiles, copyManifest, digest, id, readJson, restore, scan, validId, within, writeJson } from './files.js';
 import { assetsRoot, builtRoot, cleanEnv, findCodex, isAlive, readableRuntimePaths, sandboxPreflight, spawnPreview, spawnWorker, terminate } from './runtime.js';
@@ -33,6 +34,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
   private codexHome: string;
   private verifier: PreviewVerifier;
   private closed = false;
+  private closing = false;
   private constructor(private options: EngineOptions) {
     this.root = path.resolve(options.runtimeRoot);
     this.codexHome = path.resolve(options.codexHome ?? path.join(os.homedir(), '.codex'));
@@ -77,7 +79,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
   private file(w: Workspace, name: string): string { return path.join(w.directory, name); }
   private async save(w: Workspace): Promise<void> { await writeJson(this.file(w, 'state.json'), w.state); }
   private enter(): void {
-    if (this.closed) throw error('CLOSED', 'Engine has been closed.');
+    if (this.closed || this.closing) throw error('CLOSED', 'Engine is closing or has been closed.');
     if (this.busy) throw error('WORKSPACE_BUSY', 'C is already mutating a workspace. B must serialize calls.');
     this.busy = true;
   }
@@ -96,6 +98,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     validId(operationId);
     const previous = w.state.operations[operationId];
     if (!previous) return undefined;
+    if ((previous.result as { interrupted?: boolean })?.interrupted) throw error('INTERRUPTED_OPERATION', 'This operation was interrupted and restored during recovery. B must reconcile and use a fresh intent/operation ID.');
     if (previous.digest !== digest(request)) throw error('OPERATION_CONFLICT', 'Operation ID was reused with different content.');
     return structuredClone(previous.result) as T;
   }
@@ -118,9 +121,9 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     w.meta = { ...w.meta, revision: { ...w.state.revision }, operationId };
     await writeJson(this.file(w, 'preview.json'), w.meta);
   }
-  private async verify(w: Workspace, operationId: string, signal?: AbortSignal): Promise<BrowserEvidence> {
+  private async verify(w: Workspace, operationId: string, signal?: AbortSignal, patch?: PreviewPatch): Promise<BrowserEvidence> {
     await this.updateMeta(w, operationId);
-    w.check = await this.verifier.check(w.url, w.meta, signal);
+    w.check = await this.verifier.check(w.url, w.meta, signal, patch);
     if (w.check.compile === 'passed' && w.check.page === 'rendered') this.emit(w, operationId, 'preview', 'Preview compiled and rendered.', { revision: w.state.revision });
     else this.emit(w, operationId, 'error', w.check.diagnostics.join('\n'));
     return w.check;
@@ -156,7 +159,14 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     await this.updateMeta(w, 'prepare');
     const temp = this.file(w, 'preview-temp');
     const readable = await readableRuntimePaths(w.dependencyRoot);
-    const child = await spawnPreview({ source: w.source, meta: this.file(w, 'preview.json'), temp, readable, port, dependencyRoot: w.dependencyRoot });
+    let collectorPath: string | undefined;
+    if (this.options.collectorScriptPath) {
+      collectorPath = this.file(w, 'collector.js');
+      const script = await readFile(this.options.collectorScriptPath, 'utf8');
+      if (script.length > 1_000_000) throw error('COLLECTOR_TOO_LARGE', 'Provide a browser collector bundle under 1 MB.');
+      await writeFile(collectorPath, script, { mode: 0o600 });
+    }
+    const child = await spawnPreview({ source: w.source, meta: this.file(w, 'preview.json'), temp, readable, port, dependencyRoot: w.dependencyRoot, collectorPath });
     w.server = child;
     await writeFile(path.join(this.root, `${w.state.id}-preview.pid`), String(child.pid));
     child.stdout?.on('data', b => { w.serverLog = (w.serverLog + safeText(String(b))).slice(-8000); });
@@ -165,7 +175,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(error('PREVIEW_TIMEOUT', w.serverLog || 'Preview did not start.')), 20_000);
       child.once('error', e => { clearTimeout(timer); reject(e); });
-      child.once('exit', code => { clearTimeout(timer); reject(error('PREVIEW_EXITED', `Preview exited (${code}): ${w.serverLog}`)); });
+      child.once('exit', (code, signal) => { clearTimeout(timer); reject(error('PREVIEW_EXITED', `Preview exited (${code ?? signal}): ${w.serverLog}`)); });
       child.once('message', message => {
         if ((message as { kind: string }).kind === 'listening') { clearTimeout(timer); resolve(); }
       });
@@ -215,7 +225,9 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       await sandboxPreflight(this.codex, source, this.codexHome, await readableRuntimePaths(dependencyRoot));
       await this.startPreview(w);
       if (state.pending) {
+        const interruptedId = state.pending.id;
         await this.restoreCheckpoint(w, state.pending.checkpointId, state.pending.id);
+        state.operations[interruptedId] = { digest: 'interrupted', result: { interrupted: true } };
         state.pending = null; state.blocked = null;
       } else if (state.blocked) throw error('RECOVERY_REQUIRED', state.blocked);
       else await this.assertCurrent(w, state.revision);
@@ -232,11 +244,13 @@ export class LocalPrototypeEngine implements PrototypeEngine {
   getWorkspace(workspaceId: string): WorkspaceDetails {
     const w = this.workspace(workspaceId);
     const sources = Object.entries(w.state.manifest).filter(([p]) => /\.(jsx?|tsx?|css|html)$/.test(p)).slice(0, 80).map(([p, f]) => ({ kind: 'repo' as const, path: p, fingerprint: f.hash }));
+    const registry = w.state.project.registeredElements ?? (w.state.mode === 'blank_template' ? { 'start-button': { sourcePath: 'src/main.jsx', properties: ['size', 'background', 'label', 'radius', 'visible'] } } : {});
     return {
       workspaceId, sourcePath: w.source, revision: { ...w.state.revision }, previewUrl: w.url,
       renderState: w.check.page === 'rendered' && w.check.compile === 'passed' ? 'rendered' : 'failed',
       repoMap: { workspaceId, origin: w.state.mode, fingerprint: w.state.fingerprint, framework: { name: 'React/Vite', verified: true }, routes: [{ route: w.state.project.route ?? '/', sources }], relevantSources: sources, mockCapabilities: [], limitations: ['One configured route; no automatic arbitrary-framework or backend onboarding.', 'Controlled Vite startup ignores project vite.config and lifecycle scripts.', 'Generated app external network access is disabled.'] },
       startupCommand: 'C-supervised Vite (configFile=false, loopback only)', lastCheckpointId: w.state.lastCheckpointId, blocked: w.state.blocked, check: structuredClone(w.check),
+      registeredElements: Object.entries(registry).filter(([, value]) => w.state.manifest[value.sourcePath]).map(([elementId, value]) => ({ id: elementId, editable: [...value.properties], source: { kind: 'repo', path: value.sourcePath, fingerprint: w.state.manifest[value.sourcePath].hash } })),
     };
   }
   async runJob(job: PrototypeJob, progress: (event: WorkerProgress) => void, signal?: AbortSignal): Promise<PrototypeResult> {
@@ -382,7 +396,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       config.elements[request.patch.elementId] = { ...config.elements[request.patch.elementId], [property]: request.patch.value };
       await writeJson(configPath, config);
       await this.captureResult(w);
-      const check = await this.verify(w, request.operationId);
+      const check = await this.verify(w, request.operationId, undefined, request.patch);
       if (check.page !== 'rendered' || check.compile !== 'passed') throw error('PATCH_RENDER_FAILED', check.diagnostics.join('\n'));
       w.state.lastCheckpointId = checkpointId;
       const result = { operationId: request.operationId, applied: true, revision: { ...w.state.revision }, checkpointId };
@@ -430,6 +444,8 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       after: w.state.manifest[relative] ? (await readFile(within(w.source, relative), 'utf8')).slice(0, 100_000) : null }))) };
   }
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closing = true;
     this.active?.controller.abort();
     for (let i = 0; this.busy && i < 300; i++) await new Promise(resolve => setTimeout(resolve, 100));
     if (this.busy) throw error('SHUTDOWN_PENDING', 'Cancellation/restoration is still running. Keep the engine alive and retry close.');

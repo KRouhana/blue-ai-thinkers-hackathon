@@ -1,6 +1,8 @@
 // Preview-only transport. A may publish its collector's bounded snapshot through forkPreview.publishContext.
 let metadata;
 let lastContext = '';
+let externalCollector = false;
+let hover = null;
 const scalar = value => typeof value === 'string' ? value.slice(0, 200) : '';
 const publish = (type, payload = {}) => {
   if (!metadata || window.parent === window) return;
@@ -24,6 +26,7 @@ function publishContext(snapshot) {
   if (signature !== lastContext) { lastContext = signature; publish('fork.preview.context', payload); }
 }
 function registeredContext() {
+  if (externalCollector) return;
   const elements = [...document.querySelectorAll('[data-fork-id]')].slice(0, 100).filter(el => !el.matches('input,textarea,[contenteditable="true"]')).map(el => {
     const box = el.getBoundingClientRect();
     return { id: el.dataset.forkId, role: el.getAttribute('role') || el.tagName.toLowerCase(),
@@ -31,7 +34,7 @@ function registeredContext() {
       visible: box.width > 0 && box.height > 0 && getComputedStyle(el).visibility !== 'hidden' && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth,
       box, editable: (el.dataset.forkEditable || '').split(',') };
   });
-  publishContext({ elements, focusId: document.activeElement?.getAttribute('data-fork-id') });
+  publishContext({ elements, focusId: document.activeElement?.getAttribute('data-fork-id'), hover });
 }
 async function refresh() {
   try {
@@ -44,11 +47,13 @@ async function refresh() {
     if (changed) requestAnimationFrame(() => requestAnimationFrame(() => {
       window.__forkRendered = { ...metadata, route: location.pathname };
       publish('fork.preview.rendered', { route: location.pathname });
+      window.dispatchEvent(new CustomEvent('fork.preview.revision', { detail: { ...metadata } }));
       registeredContext();
     }));
   } catch { /* Host owns readiness timeout; no invented ready event. */ }
 }
-window.forkPreview = Object.freeze({ publishContext });
+window.forkPreview = Object.freeze({ publishContext(snapshot) { externalCollector = true; publishContext(snapshot); } });
+window.dispatchEvent(new Event('fork.preview.available'));
 window.addEventListener('message', event => {
   if (!metadata || event.source !== window.parent || event.origin !== metadata.hostOrigin) return;
   if (event.data?.type !== 'fork.preview.load-config' || event.data.workspaceId !== metadata.workspaceId) return;
@@ -59,7 +64,8 @@ window.addEventListener('error', event => publish('fork.preview.error', { messag
 window.addEventListener('unhandledrejection', () => publish('fork.preview.error', { message: 'Unhandled application promise rejection' }));
 window.addEventListener('pointerover', event => {
   const el = event.target instanceof Element ? event.target.closest('[data-fork-id]') : null;
-  if (el) publish('fork.preview.context', { route: location.pathname, hover: { elementId: scalar(el.getAttribute('data-fork-id')), at: new Date().toISOString() }, partial: true });
+  hover = el ? { elementId: scalar(el.getAttribute('data-fork-id')), at: new Date().toISOString() } : null;
+  registeredContext();
 });
 window.addEventListener('focusin', registeredContext);
 window.addEventListener('resize', registeredContext);

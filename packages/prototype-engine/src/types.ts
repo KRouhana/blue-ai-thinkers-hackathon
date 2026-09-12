@@ -1,5 +1,5 @@
 import type { PreparedWorkspace, PrototypeJob, PrototypeResult, Revision, WorkerProgress, PreviewPatch, SourceRef } from '../../../contracts.v2.js';
-export type { PrototypeEngine, PrepareRequest, PreparedWorkspace, PatchRequest, PatchResult, PrototypeJob, PrototypeResult, Revision, WorkerProgress, RepoMap } from '../../../contracts.v2.js';
+export type { PrototypeEngine, PrepareRequest, PreparedWorkspace, PatchRequest, PatchResult, PrototypeJob, PrototypeResult, Revision, WorkerProgress, RepoMap, PreviewPatch } from '../../../contracts.v2.js';
 
 export interface ProjectConfig {
   id: string;
@@ -18,6 +18,8 @@ export interface EngineOptions {
   codexHome?: string;
   model?: string;
   browserExecutable?: string;
+  /** A's bundled, browser-safe collector module. Host-configured; never a meeting-supplied path. */
+  collectorScriptPath?: string;
   jobTimeoutMs?: number;
   renderTimeoutMs?: number;
   /** B can fence obsolete attempts before C declares success. B still owns scheduling. */
@@ -42,6 +44,7 @@ export interface WorkspaceDetails extends PreparedWorkspace {
   lastCheckpointId: string | null;
   blocked: string | null;
   check: PrototypeResult['check'];
+  registeredElements: Array<{ id: string; editable: string[]; source: SourceRef }>;
 }
 export interface PreviewMetadata {
   workspaceId: string;
@@ -82,7 +85,7 @@ export function error(code: string, message: string): Error & { code: string } {
 export function sameRevision(a: Revision, b: Revision): boolean { return a.source === b.source && a.config === b.config; }
 export function safeText(text: string): string {
   return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
-    .replace(/(?:Bearer\s+|sk-)[A-Za-z0-9._-]+/gi, '[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+|\bsk-[A-Za-z0-9._-]{20,}/gi, '[redacted]')
     .replace(/((?:token|password|secret|api[_-]?key|authorization)\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]')
     .replace(/\/Users\/[^/\s]+/g, '~').slice(0, 4000);
 }
