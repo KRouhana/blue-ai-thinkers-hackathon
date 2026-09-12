@@ -1,0 +1,3 @@
+allowBuilds:
+  # tsx uses esbuild at runtime; permit its platform binary postinstall.
+  esbuild: true
