@@ -1,0 +1,16 @@
+{
+  "name": "channel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The agent, living in a Slack or Teams thread, via CopilotKit Channels.",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@copilotkit/channels": "0.9.2",
+    "@copilotkit/runtime": "1.70.3",
+    "zod": "^4.1.0"
+  }
+}
