@@ -24,7 +24,7 @@ export interface EngineOptions {
   renderTimeoutMs?: number;
   /** B can fence obsolete attempts before C declares success. B still owns scheduling. */
   isCurrent?: (job: PrototypeJob) => boolean | Promise<boolean>;
-  onEvent?: (event: EngineEvent) => void;
+  onEvent?: (event: EngineEvent) => void | Promise<void>;
 }
 export interface EngineEvent {
   workspaceId: string;
@@ -86,6 +86,8 @@ export function sameRevision(a: Revision, b: Revision): boolean { return a.sourc
 export function safeText(text: string): string {
   return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
     .replace(/\bBearer\s+[A-Za-z0-9._-]+|\bsk-[A-Za-z0-9._-]{20,}/gi, '[redacted]')
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{20,})/g, '[redacted]')
+    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[redacted]@')
     .replace(/((?:token|password|secret|api[_-]?key|authorization)\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]')
     .replace(/\/Users\/[^/\s]+/g, '~').slice(0, 4000);
 }

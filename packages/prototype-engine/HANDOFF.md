@@ -8,6 +8,8 @@ The canonical adapter shape is the supplied root `contracts.v2.ts`, imported thr
 
 Build C first, then add `@fork/prototype-engine` as the local workspace dependency using D's root package manager. Until root integration lands, direct import of the built entry also works:
 
+Create the engine only in B's server process. Keep C as an unbundled Node dependency so its worker entry points and template assets remain relative to the installed package. D's browser imports only the `/preview` subpath.
+
 ```ts
 import { createPrototypeEngine } from '@fork/prototype-engine';
 // Temporary standalone path from the repository root:
@@ -136,6 +138,8 @@ iframe.contentWindow?.postMessage({
 This only asks the preview to refresh authoritative metadata. Config mutations always go D → authenticated B control → C `applyPatch`, never through `postMessage`.
 
 Show B's job state and C's activity as escaped text. Render errors may be visible briefly during HMR. Distinguish editing, checking, restoring, and ready; do not translate every bridge render event into job success. Keep terminal output collapsible and bounded. Keep the source path/diff out of the iframe and Slack.
+
+Before final verification, C asks the preview process to invalidate its module cache and reload. This avoids serving stale modules after source restoration; it can reset transient form/input state. The private process acknowledgment is separate from the untrusted browser bridge.
 
 Root integration: add/build C with the existing root toolchain; its standalone npm lock belongs only to C until D integrates dependencies into the root lock. Do not upgrade unrelated starter/CopilotKit dependencies to accommodate C. Startup needs Node, Chromium provisioning, an authenticated Codex home, configured projects, and an exact meeting origin. C does not need another listening control service.
 

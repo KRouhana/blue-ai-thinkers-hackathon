@@ -44,6 +44,14 @@ const vite = await createServer({
 });
 await vite.listen();
 process.send?.({ kind: 'listening', url: `http://127.0.0.1:${args.port}` });
+process.on('message', message => {
+  const request = message as { kind?: string; operationId?: string };
+  if (request.kind !== 'invalidate' || typeof request.operationId !== 'string') return;
+  // File watcher delivery is asynchronous; explicitly invalidate before C opens the verification page.
+  vite.moduleGraph.invalidateAll();
+  vite.ws.send({ type: 'full-reload' });
+  process.send?.({ kind: 'invalidated', operationId: request.operationId });
+});
 let closing = false;
 async function close() { if (closing) return; closing = true; await vite.close(); process.exit(0); }
 process.on('SIGTERM', () => { void close(); });

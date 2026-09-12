@@ -23,14 +23,25 @@ No tests or test suites were written. Verification used the compiled engine, its
 | Duplicate request | Resending the identical `manual-size-lg-1` request returned the original result/checkpoint/revision without another edit. |
 | Conflicting ID | Reusing that ID for a different size produced `OPERATION_CONFLICT`. |
 | Stale request | A new operation using the previous revision produced `STALE_REVISION`. |
+| Existing project | Prepared an actual local Git repository containing the previously generated React/Vite app, dirty source/CSS, and an untracked note. All seven original-file fingerprints remained identical after preparation, patch failure, and rollback; Git still showed the original dirty/untracked state. This was a controlled local onboarding input, not a claim of qualifying an arbitrary production repository. |
+| Copy exclusions | The prepared copy retained dirty CSS and the untracked note, and excluded `.git` and the local `.env` marker. |
+| Failed render / rollback | The existing-project input contained a deliberate runtime exception for the `xl` size. The real browser detected failure; operation `8f09726d-69db-400e-bde4-8e342e320cff` returned `applied:false`, restored a verified working preview at `{source:3,config:5}`, and a subsequent `lg` patch succeeded. |
+| Recovery after restart | Restarting the earlier blocked runtime restored its recorded checkpoint and rendered at `{source:2,config:3}`. Interrupted operation IDs are fenced from automatic replay. |
+| Actual Codex repair | During job `b3f957b3-45d2-49e6-a014-58ac55fab128`, a one-off syntax error was manually injected into the disposable source. The visible browser showed Vite's compile-error overlay. C detected HTTP 500/failed rendering, invoked one real Codex repair, and verified the repaired page at `{source:9,config:5}`. The browser showed the requested “Live workspace” heading and intact task list. |
+| Preview bridge / D connector | A temporary loopback iframe inspection page imported C's actual `connectPreview` export. It received `fork.preview.rendered` and `fork.preview.context` at `{source:9,config:5}`, with the correct workspace ID and one registered element. The real app rendered inside the separate-origin sandboxed iframe. The inspection page was explicitly labeled as not connected to A/B/D. |
+| Shutdown | `quit` completed after closing both prepared previews and the verification browser. The engine lock was removed and zero owned PID records remained. The temporary iframe-inspection listener was also stopped. |
 
 The sample task data was explicitly requested for this local interaction check. Code generation, authentication, terminal execution, file edits, Vite, browser checks, and Undo were live. A typed driver request supplied the intent; audio, planner, and Slack were not simulated and were not claimed to be connected.
 
-## Remaining qualification in progress
+## Fixes found by the manual pass
 
-- Existing-project onboarding with dirty/untracked source and original-file fingerprints.
-- Deliberately failed render and verified checkpoint recovery.
-- Final shutdown/process cleanup and final revision of the A/B/D handoff.
+- Homebrew Node needed explicit runtime library/config read paths, and the preview loader needed to open the filesystem root. Those runtime allowances were added while preserving home/credential restrictions.
+- Vite's asynchronous file watcher briefly served stale modules after rollback. C now waits for an explicit child-process module-cache invalidation acknowledgment before opening its verification page. The deliberately failed patch was repeated and recovered successfully after this fix.
+- A broad key-redaction pattern incorrectly masked `task-search`. It was restricted to credential-like token lengths and boundaries.
+
+The deliberate syntax/runtime faults were manual failure injection, not spontaneous model failures or simulated successful integrations. Source repair and config rollback were both exercised; exhaustion of the repair attempt followed by source rollback was not separately forced. Hard power loss, arbitrary process-detachment attacks, quota exhaustion, and a long meeting soak remain unqualified beyond the bounded recovery/deadline implementation.
+
+Final build and typecheck passed after the fixes. No test/spec files or suites were added. C is ready for integration within the documented local Mac / React-Vite scope; the full A-D meeting flow remains the next acceptance gate.
 
 ## Integration boundary
 

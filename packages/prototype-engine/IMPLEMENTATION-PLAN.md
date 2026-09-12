@@ -1,6 +1,6 @@
 # C implementation plan: real local coding with live feedback
 
-Status: implementation underway, 2026-09-12. The user's subsequent instructions govern delivery: no tests, a lean hackathon implementation, manual verification, and incremental pushes. Acceptance evidence and integration instructions are recorded in this package's handoff documents.
+Status: implemented for the bounded local Mac / React-Vite scope, 2026-09-12. The user's subsequent instructions govern delivery: no tests, a lean hackathon implementation, manual verification, and incremental pushes. See README.md, HANDOFF.md, and VERIFICATION.md for the actual supported behavior, manual evidence, and remaining integrated A-D qualification. The broader items below are design context, not claims of universal support.
 
 Branch: `feat/local-prototyper`.
 
