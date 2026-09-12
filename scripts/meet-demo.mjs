@@ -71,9 +71,13 @@ sockets.on('connection', ws => {
     }catch{console.error('Invalid Recall audio packet');}
   });
 });
-const server=createServer((req,res)=>{
+const server=createServer(async(req,res)=>{
   if(req.method!=='GET' || req.url?.startsWith('/recall/') || req.url?.startsWith('/api/') || req.url?.includes('__open-in-editor')){res.writeHead(404);res.end();return;}
-  if(req.url==='/presenter') {res.setHeader('Content-Type','text/html');res.end('<html><body style="margin:0;background:#fff"><iframe id="p" src="/" style="border:0;width:100vw;height:100vh"></iframe><script>setInterval(()=>document.getElementById("p").src="/?refresh="+Date.now(),10000)</script></body></html>');return;}
+  if(req.url==='/preview-version') {
+    try { const {snapshot}=await api('');res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(snapshot.revision)); }
+    catch {res.writeHead(503);res.end();}return;
+  }
+  if(req.url==='/presenter') {res.setHeader('Content-Type','text/html');res.end('<html><body style="margin:0;background:#fff"><iframe id="p" src="/" style="border:0;width:100vw;height:100vh"></iframe><script>let revision;setInterval(async()=>{try{const r=await fetch("/preview-version",{cache:"no-store"});if(!r.ok)return;const next=JSON.stringify(await r.json());if(revision && next!==revision)document.getElementById("p").src="/?refresh="+Date.now();revision=next}catch{}},2000)</script></body></html>');return;}
   const upstream=request({hostname:'127.0.0.1',port:4173,path:req.url,method:'GET',headers:{...req.headers,host:'127.0.0.1:4173'}},r=>{
     const h={...r.headers}; delete h['content-security-policy']; // Sample page is framed by this same-origin presenter.
     h['content-security-policy']="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://127.0.0.1:4173; frame-ancestors 'self'";
