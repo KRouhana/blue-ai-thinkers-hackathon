@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assetsRoot } from './runtime.js';
 
-const args = JSON.parse(process.argv[2]) as { source: string; meta: string; port: number; dependencyRoot: string; collectorPath?: string };
+const args = JSON.parse(process.argv[2]) as { source: string; meta: string; port: number; dependencyRoot: string; collectorPath?: string; publicHosts?: string[] };
 const bridge = await readFile(path.join(assetsRoot, 'bridge.js'), 'utf8');
 const collector = args.collectorPath ? await readFile(args.collectorPath, 'utf8') : undefined;
 const metadata = JSON.parse(await readFile(args.meta, 'utf8')) as { hostOrigin: string };
@@ -16,7 +16,7 @@ const vite = await createServer({
   esbuild: { jsx: 'automatic' },
   server: {
     host: '127.0.0.1', port: args.port, strictPort: true, cors: false,
-    allowedHosts: ['127.0.0.1', 'localhost'],
+    allowedHosts: ['127.0.0.1', 'localhost', ...(args.publicHosts ?? [])],
     fs: { strict: true, allow: [args.source, args.dependencyRoot], deny: ['**/.env*', '**/*.{pem,key,p12,pfx}', '**/.git/**', '**/.npmrc'] },
   },
   plugins: [{

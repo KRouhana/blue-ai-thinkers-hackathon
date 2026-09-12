@@ -3,20 +3,20 @@ import { spawn } from 'node:child_process';
 const mode = process.env.FORK_MODE || 'fixture';
 if (!['fixture', 'live'].includes(mode)) throw new Error('FORK_MODE must be fixture or live.');
 const commands = [{ label: 'meeting', args: ['run', 'dev', '--workspace', 'meeting'] }];
-if (mode === 'fixture') commands.push({ label: 'fixture preview', preview: true, args: ['exec', '--workspace', 'meeting', '--', 'vite', 'fixtures', '--host', '127.0.0.1', '--port', '4173', '--strictPort'] });
-else {
-  for (const [key, label] of [['FORK_API_WORKSPACE', 'session API'], ['FORK_PREVIEW_WORKSPACE', 'prototype preview']]) {
-    const workspace = process.env[key];
-    if (workspace) {
-      if (!/^(@[\w.-]+\/)?[\w.-]+$/.test(workspace)) throw new Error(`${key} must be an npm workspace name.`);
-      commands.push({ label, preview: key === 'FORK_PREVIEW_WORKSPACE', args: ['run', 'dev', '--workspace', workspace] });
-    } else console.log(`[fork] ${label}: start your teammate’s service separately, or set ${key}.`);
-  }
+if (mode === 'fixture') {
+  commands.push({ label: 'fixture preview', preview: true, args: ['exec', '--workspace', 'meeting', '--', 'vite', 'fixtures', '--host', '127.0.0.1', '--port', '4173', '--strictPort'] });
+} else {
+  // B (apps/api) now hosts C's real prototype engine directly (FORK_ENGINE=live) —
+  // no separate preview process to start. A's real capture (Google Meet via Recall)
+  // runs as its own process against a real meeting link: `npm run meetbot`, started
+  // separately since it needs a meeting URL and public tunnels this launcher can't supply.
+  commands.push({ label: 'control API', args: ['run', 'dev', '--workspace', 'api'] });
 }
 if (process.env.FORK_SLACK_ENABLED === 'true') commands.push({ label: 'Slack', args: ['run', 'dev', '--workspace', 'channel'] });
 else console.log('[fork] Slack listener disabled. Set FORK_SLACK_ENABLED=true after managed Channels setup.');
 console.log(`[fork] ${mode.toUpperCase()} mode · meeting http://127.0.0.1:3000`);
-if (mode === 'fixture') console.log('[fork] Prepared fixture events only. No live microphone, Slack meeting, model, or Codex connection.');
+if (mode === 'fixture') console.log('[fork] Prepared fixture events only. No live microphone, Google Meet, model, or Codex connection.');
+else console.log('[fork] Live mode: B (control API + C\'s engine) + D (meeting). Run `npm run meetbot` separately for a real Google Meet call.');
 
 const children = [];
 const previewEnvironment = Object.fromEntries(['PATH', 'TMPDIR', 'TEMP', 'TMP', 'TERM', 'LANG', 'NODE_ENV'].flatMap(key => process.env[key] === undefined ? [] : [[key, process.env[key]]]));

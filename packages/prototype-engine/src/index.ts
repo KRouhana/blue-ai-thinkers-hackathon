@@ -178,7 +178,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       if (script.length > 1_000_000) throw error('COLLECTOR_TOO_LARGE', 'Provide a browser collector bundle under 1 MB.');
       await writeFile(collectorPath, script, { mode: 0o600 });
     }
-    const child = await spawnPreview({ source: w.source, meta: this.file(w, 'preview.json'), temp, readable, port, dependencyRoot: w.dependencyRoot, collectorPath });
+    const child = await spawnPreview({ source: w.source, meta: this.file(w, 'preview.json'), temp, readable, port, dependencyRoot: w.dependencyRoot, collectorPath, publicHosts: this.options.publicPreviewHosts });
     w.server = child;
     await writeFile(path.join(this.root, `${w.state.id}-preview.pid`), String(child.pid));
     child.stdout?.on('data', b => { w.serverLog = (w.serverLog + safeText(String(b))).slice(-8000); });

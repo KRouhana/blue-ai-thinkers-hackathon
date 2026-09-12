@@ -22,7 +22,11 @@ export async function findCodex(override?: string): Promise<string> {
   return path.join(pkg, 'vendor', triple, 'bin', 'codex');
 }
 export async function readableRuntimePaths(dependencyRoot: string): Promise<string[]> {
-  const paths = [process.execPath, path.dirname(path.dirname(process.execPath)), builtRoot, path.join(packageRoot, 'node_modules'), dependencyRoot];
+  // Node's own ESM loader walks up from the spawned entry script looking for the
+  // nearest package.json to resolve module type (commonjs vs module). That walk
+  // exits `builtRoot` into packageRoot itself, so packageRoot must be readable too
+  // (it has no secrets: this package's own source/package.json/lockfile).
+  const paths = [process.execPath, path.dirname(path.dirname(process.execPath)), builtRoot, packageRoot, path.join(packageRoot, 'node_modules'), dependencyRoot];
   // Homebrew Node links its runtime libraries from versioned Cellar packages.
   try { paths.push(await realpath('/opt/homebrew/Cellar'), '/opt/homebrew/opt'); } catch { /* nvm/system Node does not need Homebrew. */ }
   try { paths.push(await realpath('/opt/homebrew/etc/openssl@3/openssl.cnf')); } catch { /* Optional Homebrew OpenSSL runtime configuration. */ }
@@ -60,7 +64,7 @@ export function spawnWorker(file: string, cwd: string, temp: string): ChildProce
 }
 
 /** Seatbelt also contains the generated Vite code; it may listen only on its assigned loopback port. */
-export async function spawnPreview(args: { source: string; meta: string; temp: string; readable: string[]; port: number; dependencyRoot: string; collectorPath?: string }): Promise<ChildProcess> {
+export async function spawnPreview(args: { source: string; meta: string; temp: string; readable: string[]; port: number; dependencyRoot: string; collectorPath?: string; publicHosts?: string[] }): Promise<ChildProcess> {
   if (process.platform !== 'darwin') throw error('UNSUPPORTED_HOST', 'The initial preview isolation profile supports macOS only.');
   const quote = (s: string) => JSON.stringify(s);
   const profile = `(version 1)
@@ -70,6 +74,7 @@ export async function spawnPreview(args: { source: string; meta: string; temp: s
 (allow file-read-metadata)
 (allow file-read* (literal "/"))
 (allow file-read* (subpath "/System") (subpath "/usr") (subpath "/bin") (subpath "/sbin") (subpath "/dev") (subpath "/private/etc") (subpath "/Library/Apple"))
+(allow file-read* (literal ${quote(path.join(packageRoot, '..', '..', 'package.json'))}))
 (allow file-read* ${[args.source, args.meta, ...(args.collectorPath ? [args.collectorPath] : []), ...args.readable].map(p => `(subpath ${quote(p)})`).join(' ')})
 (allow file-write* (subpath ${quote(path.join(args.source, '.fork-cache'))}) (subpath ${quote(args.temp)}) (literal "/dev/null"))
 (allow network-bind (local ip "localhost:${args.port}"))

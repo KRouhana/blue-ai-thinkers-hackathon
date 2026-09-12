@@ -1,28 +1,31 @@
 {
-  "name": "fork-integration",
+  "name": "fork-v2",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Fork Track D: meeting workspace and Slack integration",
+  "description": "Fork — silent meeting coworker. A (packages/perception), B (packages/orchestrator, packages/state, packages/contracts, apps/api), C (packages/prototype-engine), D (apps/meeting, apps/channel, apps/meet-bot) integrated at root.",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "workspaces": [
-    "apps/meeting",
-    "apps/channel",
-    "apps/meet-bot"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:api": "npm run dev --workspace api",
     "dev:meeting": "npm run dev --workspace meeting",
     "dev:slack": "npm run dev --workspace channel",
     "meetbot": "npm run start --workspace meet-bot --",
     "publish-session": "node scripts/publish-session.mjs",
     "channel:setup": "npx copilotkit@latest channels setup",
     "channel:status": "npx copilotkit@latest channels status --json",
+    "replay": "npm run replay --workspace api --",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "node --import tsx --test apps/meeting/src/integration/*.test.ts apps/channel/src/*.test.tsx",
+    "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspace meeting",
     "verify": "npm run typecheck && npm test && npm run build"
   },
@@ -31,7 +34,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "eslint": "^10.10.0",
     "tsx": "^4.23.1",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.70.0"
   }
 }

@@ -1,0 +1,16 @@
+{
+  "projects": [
+    {
+      "id": "demo-product",
+      "label": "Fixture demo product (synthetic)",
+      "mode": "existing_repo",
+      "workspaceRoot": null
+    },
+    {
+      "id": "blank-template",
+      "label": "Blank prepared React/Vite template",
+      "mode": "blank_template",
+      "workspaceRoot": null
+    }
+  ]
+}

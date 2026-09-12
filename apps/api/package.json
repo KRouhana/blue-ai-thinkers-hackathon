@@ -1,0 +1,24 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fork v2 private control API (loopback). Owned by Track B.",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --disable-warning=ExperimentalWarning --import tsx --watch src/server.ts",
+    "start": "node --env-file-if-exists=../../.env --disable-warning=ExperimentalWarning --import tsx src/server.ts",
+    "replay": "node --env-file-if-exists=../../.env --disable-warning=ExperimentalWarning --import tsx scripts/replay-scenarios.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test 'src/**/*.test.ts'",
+    "test:coverage": "node --disable-warning=ExperimentalWarning --import tsx --experimental-test-coverage --test-coverage-lines=80 --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@fork/contracts": "*",
+    "@fork/orchestrator": "*",
+    "@fork/prototype-engine": "*",
+    "@fork/state": "*",
+    "@hono/node-server": "^2.1.0",
+    "hono": "^4.13.0",
+    "zod": "^4.1.0"
+  }
+}

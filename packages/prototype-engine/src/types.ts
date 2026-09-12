@@ -20,6 +20,8 @@ export interface EngineOptions {
   browserExecutable?: string;
   /** A's bundled, browser-safe collector module. Host-configured; never a meeting-supplied path. */
   collectorScriptPath?: string;
+  /** Host-configured only (e.g. an operator's own tunnel hostname for a real demo); never meeting-supplied. Defaults to none: the preview stays 127.0.0.1/localhost-only. */
+  publicPreviewHosts?: string[];
   jobTimeoutMs?: number;
   renderTimeoutMs?: number;
   /** B can fence obsolete attempts before C declares success. B still owns scheduling. */
