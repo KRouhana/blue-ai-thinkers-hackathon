@@ -1,9 +1,9 @@
 // Joins a Google Meet call via the Recall.ai meeting-bot API and shows the Fork
-// presenter view (apps/meeting's ?presenter=1 route: just the live prototype,
-// full-bleed) as the bot's camera output. Recall's cloud infrastructure runs the
-// join and renders the given webpage into the call — no local browser automation
-// needed. The presenter URL must be publicly reachable (Recall's servers fetch it),
-// so a local dev server needs a tunnel (ngrok/cloudflared) in front of it.
+// meeting workspace (apps/meeting has no dashboard, no controls — just the live
+// prototype, full-bleed) as the bot's camera output. Recall's cloud infrastructure
+// runs the join and renders the given webpage into the call — no local browser
+// automation needed. The URL must be publicly reachable (Recall's servers fetch
+// it), so a local dev server needs a tunnel (ngrok/cloudflared) in front of it.
 //
 // API shape verified against https://docs.recall.ai (stream-media, bot_retrieve,
 // bot_leave_call_create) on 2026-09-12. Recall's dashboard/reference is the source
@@ -16,7 +16,7 @@ function parseArgs(argv: string[]): Options {
   const url = get('--url');
   const presenterUrl = get('--presenter-url');
   if (!url || !presenterUrl) {
-    throw new Error('Usage: npm run meetbot -- --url https://meet.google.com/xxx-yyyy-zzz --presenter-url https://<public-tunnel>/?presenter=1[&session=<id>] [--name "Fork"] [--region us-east-1]');
+    throw new Error('Usage: npm run meetbot -- --url https://meet.google.com/xxx-yyyy-zzz --presenter-url https://<public-tunnel>/[?session=<id>] [--name "Fork"] [--region us-east-1]');
   }
   if (!/^https:\/\//.test(presenterUrl) || presenterUrl.includes('127.0.0.1') || presenterUrl.includes('localhost')) {
     throw new Error('--presenter-url must be a public HTTPS URL. Recall\'s cloud bot cannot reach 127.0.0.1/localhost on this Mac; put a tunnel (ngrok, cloudflared) in front of the meeting dev server first.');

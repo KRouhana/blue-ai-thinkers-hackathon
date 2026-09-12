@@ -1,26 +1,26 @@
 # meet-bot — Google Meet join via Recall.ai
 
-Google Meet has no public API for a bot to join as a real media participant. [Recall.ai](https://recall.ai) is a third-party meeting-bot service that handles the join for Zoom/Meet/Teams and can display a webpage — here, `apps/meeting`'s presenter view — as the bot's camera feed. This is a paid third-party service, not something Google or Slack provide directly, and requires your own Recall.ai account.
+Google Meet has no public API for a bot to join as a real media participant. [Recall.ai](https://recall.ai) is a third-party meeting-bot service that handles the join for Zoom/Meet/Teams and can display a webpage — here, `apps/meeting`, which is nothing but this live view now (no dashboard, no manual controls) — as the bot's camera feed. This is a paid third-party service, not something Google or Slack provide directly, and requires your own Recall.ai account.
 
 ## What it does
 
-1. You give it a Meet link and a **public** URL for the Fork meeting workspace's presenter view (`/?presenter=1`, full-bleed live prototype, no sidebar/chrome).
+1. You give it a Meet link and a **public** URL for the Fork meeting workspace (`apps/meeting`'s only page: full-bleed live prototype, nothing else). Fork starts listening on its own as soon as that page loads a session — there's no start button.
 2. It calls Recall's API to create a bot that joins the call and renders that webpage as its camera output.
-3. It polls bot status and prints it; Ctrl+C makes the bot leave the call.
+3. It polls bot status and prints it; Ctrl+C makes the bot leave the call and stops Fork (that's the kill switch — there's no in-page stop control).
 
 ## Setup
 
 1. Create a [Recall.ai](https://recall.ai) account and get an API key. Set `RECALL_API_KEY` (and `RECALL_REGION` if not `us-east-1`) in the repo root `.env`.
 2. Start the meeting workspace: `npm run dev` from the repo root (serves at `http://127.0.0.1:3000`).
-3. Expose the presenter route publicly with a tunnel, since Recall's cloud bot cannot reach `127.0.0.1` on your Mac:
+3. Expose it publicly with a tunnel, since Recall's cloud bot cannot reach `127.0.0.1` on your Mac:
    ```sh
    ngrok http 3000
    ```
    Take the printed `https://<random>.ngrok-free.app` URL.
-4. Start (or note) a session in the meeting workspace so you have a `?session=<id>`, or omit it to let the bot show whatever session loads by default.
+4. Note the session ID from the workspace's URL bar (it self-assigns one on load: `?session=<id>`), or omit it to let the bot show whatever session loads by default.
 5. Run the bot:
    ```sh
-   npm run meetbot -- --url https://meet.google.com/xxx-yyyy-zzz --presenter-url "https://<random>.ngrok-free.app/?presenter=1&session=<id>"
+   npm run meetbot -- --url https://meet.google.com/xxx-yyyy-zzz --presenter-url "https://<random>.ngrok-free.app/?session=<id>"
    ```
 
 ## Known limits

@@ -1,6 +1,6 @@
 # Fork — Track D integration
 
-Fork is a silent prototyping teammate for a brainstorming session. This checkout implements **D: Slack cards, the browser meeting workspace, and adapters for A/B/C**. It does not implement A’s audio capture, B’s orchestration/API, or C’s Codex prototype engine.
+Fork is a silent prototyping teammate for a brainstorming session. It listens, builds a live demo of what's being discussed, and shows it — no dashboard, no manual start/pause/undo buttons to click. This checkout implements **D: the browser meeting workspace (now just the live prototype view) and adapters for A/B/C**. Slack cards exist (`apps/channel`) but are optional/off by default; the primary path is Google Meet via `apps/meet-bot`. It does not implement A’s audio capture, B’s orchestration/API, or C’s Codex prototype engine.
 
 The requested product includes Fork participating in a video call and automatically presenting a prototype. CopilotKit Channels supplies the Slack messaging surface only; it does not establish Huddle media access, and that path remains a human screen-share. For **Google Meet**, `apps/meet-bot` joins via the third-party [Recall.ai](https://recall.ai) meeting-bot API and shows the presenter view as the bot's camera — see [apps/meet-bot/README.md](apps/meet-bot/README.md) for setup and limits (paid service, requires a public tunnel, host admission still applies, not end-to-end verified in this checkout without a live Recall account).
 
@@ -14,9 +14,9 @@ cp .env.example .env
 npm run dev
 ```
 
-Open **http://127.0.0.1:3000** on the local Mac. Keep `127.0.0.1` rather than substituting `localhost`: the fixture bridge uses exact origins. The launcher starts the meeting shell on port 3000 and a separate prepared preview on port 4173. Press Ctrl+C to stop both.
+Open **http://127.0.0.1:3000** on the local Mac. Keep `127.0.0.1` rather than substituting `localhost`: the fixture bridge uses exact origins. The launcher starts the meeting shell on port 3000 and a separate prepared preview on port 4173. Press Ctrl+C to stop both — that's the only stop control; there is no in-page button.
 
-Fixture mode is the default and is visibly labeled. Enable the session locally, then use **Next fixture event** to step through small talk, a larger button, a color correction, simulated build/check/ready events, clarification, and failure. Try Pause, Resume, Undo, Cancel, and Stop. Reload to reset the in-memory fixture. The task board uses prepared mock data; no microphone, model, Codex worker, Huddle, database, or deployment is involved.
+Fixture mode is the default and is visibly labeled. The page has no buttons: it creates a session and shows the fixture preview on load. To step through fixture events (small talk, a larger button, a color correction, simulated build/check/ready, clarification, failure) during development, open the browser console and call `forkFixture.advanceScenario()`. Reload to reset the in-memory fixture. The task board uses prepared mock data; no microphone, model, Codex worker, Google Meet, database, or deployment is involved.
 
 ## Connect the teammates’ work
 
