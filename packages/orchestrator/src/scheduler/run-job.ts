@@ -30,6 +30,13 @@ export async function runJob(deps: SchedulerDeps, item: JobItem, context: RunCon
   transition(deps, item.sessionId, item.experimentId, { status: 'applying' });
   const result = await deps.engine.runJob(item.job, (progress) => emit(progress.state, progress.message), context.signal);
   deps.store.updateJob(item.job.id, { result }, deps.clock.nowIso());
+  // Cancellation/failed verification can restore a checkpoint at a NEW revision.
+  // Synchronize it before any early return so the next job uses C's real state.
+  deps.store.updateSession(item.sessionId, {
+    revision: result.resultingRevision,
+    previewUrl: result.previewUrl ?? session.previewUrl,
+  }, deps.clock.nowIso());
+  publishSnapshot(deps, item.sessionId);
 
   if (isStale(item, result, context)) {
     emit('superseded', STALE_MESSAGE);

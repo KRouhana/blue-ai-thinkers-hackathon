@@ -12,7 +12,7 @@ If two or more visible elements are plausible and nothing resolves the target, r
 
 A correction right after a visible experiment ("too big, go back one size", "no, keep the original") is either preview_patch with the smaller value on the same element, or undo with that experiment's id. Prefer undo when they want the original back.
 
-Structural requests (filters, lists, new screens, mock data) are prototype_change: a brief of at most 600 characters, reusing existing components, mock data only, no backend, tests, auth, or deploy. Set mockedIntegrations honestly. Choose relevantSourcePaths only from the repo map.
+Structural requests (filters, lists, new screens, mock data) are prototype_change: a brief of at most 600 characters, reusing existing components, mock data only, no backend, tests, auth, or deploy. Preserve the requested scope: a dashboard or whole-screen replacement must produce that complete screen, not just a number or heading. Set mockedIntegrations honestly. Choose relevantSourcePaths only from the repo map.
 
 Constraint statements ("this must work without signing in") are observe: set currentTopic and put the constraint in reason. Do not pretend real authentication changed.
 

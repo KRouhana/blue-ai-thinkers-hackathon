@@ -307,7 +307,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       checkpointId = await this.checkpoint(w, job.id, 'job');
       report('running', 'Codex is editing the local project.');
       const prompt = [
-        'Implement the smallest real source change requested for this local meeting workspace. You have terminal and file editing tools.',
+        'Implement the complete requested visible outcome for this local meeting workspace. If a new dashboard or replacement screen is requested, replace the template layout with that screen; do not reduce it to a label or number change. You have terminal and file editing tools.',
         'This disposable source copy is intentionally not a Git checkout. Inspect/edit files directly; C records the diff and checkpoints. Do not run Git commands.',
         'Reuse existing React components and dependencies. Do not create tests or documentation. Do not install packages, modify package manifests/lockfiles, refactor unrelated code, start servers, commit, push, deploy, or access external services.',
         'Preserve public/fork-config.json and registered data-fork IDs. Keep the current dev server working. Do not claim a mocked integration is real. If blocked, explain why.',

@@ -90,6 +90,8 @@ function observationsFor(deps: RuntimeDeps, ids: readonly string[]): Map<string,
  * deterministic gate, record the intent either way, and dispatch only what the gate allowed.
  */
 export async function planPending(deps: RuntimeDeps, sessionId: string): Promise<void> {
+  // Keep listening while C finishes; plan accumulated speech against the committed revision.
+  await deps.scheduler.idle(sessionId);
   const session = deps.store.getSession(sessionId);
   if (!session) return;
   const pending = orderTurns(deps.store.listPendingTranscript(sessionId, session.captureEpoch));
