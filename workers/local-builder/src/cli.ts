@@ -12,7 +12,7 @@ const config = configIndex >= 0 ? JSON.parse(await readFile(process.argv[configI
   hostOrigin: 'http://localhost:3000', projects: [{ id: 'blank' }],
 };
 const send = (kind: string, data: unknown) => process.stdout.write(JSON.stringify({ kind, data }) + '\n');
-const engine = await createPrototypeEngine({ ...config, onEvent: event => send('event', event) });
+const engine = await createPrototypeEngine({ ...config, onEvent: event => { send('event', event); } });
 let current: Awaited<ReturnType<typeof engine.prepare>> | undefined;
 let closing = false;
 let activeJob: string | undefined;

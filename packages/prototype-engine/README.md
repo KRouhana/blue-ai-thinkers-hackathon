@@ -75,6 +75,7 @@ The default runtime directory is the OS temporary directory plus `fork-c-<uid>`.
 - Generated preview processes have read-only source access, writable caches, and only their own loopback listener. Browser CSP blocks external connections, framing, and form submissions.
 - Source changes use actual HMR and may briefly expose partial edits. The UI must show editing/checking/restoring, not promise atomic visual promotion.
 - Changes are retained in the private prepared source directory. `getChanges`/`diff` exposes a local before/after artifact. Committing or copying changes to the original project remains a deliberate host operation.
+- C exclusively owns the prepared copy during jobs and recovery. If you need human edits, work on a separate copy; edits made inside an active/interrupted managed workspace cannot be distinguished from worker edits and can be reverted during recovery.
 - Do not expose the dev server publicly. B owns authentication/origin validation for all control requests. The preview has no mutation API.
 
 ## Troubleshooting
@@ -86,6 +87,8 @@ The default runtime directory is the OS temporary directory plus `fork-c-<uid>`.
 `WORKSPACE_CONFLICT`: someone changed the disposable source outside C. Preserve the directory and prepare a new session; C deliberately will not reset over unknown edits.
 
 `STALE_REVISION` / `STALE_SOURCE`: B must refresh state/context and re-evaluate the request. Do not blindly update the revision on an old intent.
+
+Final render verification invalidates Vite's module cache and requests a full reload. This prevents stale modules after rollback; transient browser input state can reset when a change is finalized.
 
 `RECOVERY_REQUIRED`: stop any old owned worker process first. On a safe restart, prepare the same session/project to restore an interrupted checkpoint. Ambiguous live processes are not killed by PID guesswork. An unrecoverable render failure blocks further mutations.
 

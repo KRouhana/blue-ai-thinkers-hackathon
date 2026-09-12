@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
@@ -74,7 +75,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
   }
   private emit(w: Workspace, operationId: string, kind: EngineEvent['kind'], message: string, extra: Partial<EngineEvent> = {}): void {
     const event: EngineEvent = { workspaceId: w.state.id, operationId, sequence: ++this.sequence, at: new Date().toISOString(), kind, message: safeText(message), ...extra };
-    try { this.options.onEvent?.(event); } catch { /* A UI sink must not strand a filesystem operation. */ }
+    try { const delivery = this.options.onEvent?.(event); if (delivery) void delivery.catch(() => {}); } catch { /* B can reconcile the durable result if its UI sink fails. */ }
   }
   private file(w: Workspace, name: string): string { return path.join(w.directory, name); }
   private async save(w: Workspace): Promise<void> { await writeJson(this.file(w, 'state.json'), w.state); }
@@ -83,11 +84,11 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     if (this.busy) throw error('WORKSPACE_BUSY', 'C is already mutating a workspace. B must serialize calls.');
     this.busy = true;
   }
-  private workspace(workspaceId: string): Workspace {
+  private workspace(workspaceId: string, allowBlocked = false): Workspace {
     validId(workspaceId);
     const w = this.workspaces.get(workspaceId);
     if (!w) throw error('UNKNOWN_WORKSPACE', 'Call prepare for this configured session first.');
-    if (w.state.blocked) throw error('RECOVERY_REQUIRED', w.state.blocked);
+    if (w.state.blocked && !allowBlocked) throw error('RECOVERY_REQUIRED', w.state.blocked);
     return w;
   }
   private async assertCurrent(w: Workspace, expected: { source: number; config: number }): Promise<void> {
@@ -123,6 +124,17 @@ export class LocalPrototypeEngine implements PrototypeEngine {
   }
   private async verify(w: Workspace, operationId: string, signal?: AbortSignal, patch?: PreviewPatch): Promise<BrowserEvidence> {
     await this.updateMeta(w, operationId);
+    await new Promise<void>((resolve, reject) => {
+      const child = w.server;
+      if (!child?.connected || child.exitCode !== null || child.signalCode !== null) { reject(error('PREVIEW_EXITED', 'Preview process is not running.')); return; }
+      const timer = setTimeout(() => { child.off('message', acknowledge); reject(error('PREVIEW_TIMEOUT', 'Preview did not acknowledge module invalidation.')); }, 5000);
+      const acknowledge = (message: unknown) => {
+        const response = message as { kind?: string; operationId?: string };
+        if (response.kind === 'invalidated' && response.operationId === operationId) { clearTimeout(timer); child.off('message', acknowledge); resolve(); }
+      };
+      child.on('message', acknowledge);
+      child.send({ kind: 'invalidate', operationId }, e => { if (e) { clearTimeout(timer); child.off('message', acknowledge); reject(e); } });
+    });
     w.check = await this.verifier.check(w.url, w.meta, signal, patch);
     if (w.check.compile === 'passed' && w.check.page === 'rendered') this.emit(w, operationId, 'preview', 'Preview compiled and rendered.', { revision: w.state.revision });
     else this.emit(w, operationId, 'error', w.check.diagnostics.join('\n'));
@@ -242,15 +254,23 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     } finally { this.busy = false; }
   }
   getWorkspace(workspaceId: string): WorkspaceDetails {
-    const w = this.workspace(workspaceId);
+    const w = this.workspace(workspaceId, true);
     const sources = Object.entries(w.state.manifest).filter(([p]) => /\.(jsx?|tsx?|css|html)$/.test(p)).slice(0, 80).map(([p, f]) => ({ kind: 'repo' as const, path: p, fingerprint: f.hash }));
     const registry = w.state.project.registeredElements ?? (w.state.mode === 'blank_template' ? { 'start-button': { sourcePath: 'src/main.jsx', properties: ['size', 'background', 'label', 'radius', 'visible'] } } : {});
     return {
       workspaceId, sourcePath: w.source, revision: { ...w.state.revision }, previewUrl: w.url,
-      renderState: w.check.page === 'rendered' && w.check.compile === 'passed' ? 'rendered' : 'failed',
+      renderState: !w.state.blocked && w.server?.exitCode === null && w.server.signalCode === null && w.check.page === 'rendered' && w.check.compile === 'passed' ? 'rendered' : 'failed',
       repoMap: { workspaceId, origin: w.state.mode, fingerprint: w.state.fingerprint, framework: { name: 'React/Vite', verified: true }, routes: [{ route: w.state.project.route ?? '/', sources }], relevantSources: sources, mockCapabilities: [], limitations: ['One configured route; no automatic arbitrary-framework or backend onboarding.', 'Controlled Vite startup ignores project vite.config and lifecycle scripts.', 'Generated app external network access is disabled.'] },
       startupCommand: 'C-supervised Vite (configFile=false, loopback only)', lastCheckpointId: w.state.lastCheckpointId, blocked: w.state.blocked, check: structuredClone(w.check),
-      registeredElements: Object.entries(registry).filter(([, value]) => w.state.manifest[value.sourcePath]).map(([elementId, value]) => ({ id: elementId, editable: [...value.properties], source: { kind: 'repo', path: value.sourcePath, fingerprint: w.state.manifest[value.sourcePath].hash } })),
+      registeredElements: Object.entries(registry).filter(([elementId, value]) => {
+        if (!w.state.manifest[value.sourcePath]) return false;
+        try {
+          const file = realpathSync(within(w.source, value.sourcePath));
+          if (!file.startsWith(w.source + path.sep)) return false;
+          const content = readFileSync(file, 'utf8');
+          return content.includes(`data-fork-id="${elementId}"`) || content.includes(`data-fork-id='${elementId}'`);
+        } catch { return false; }
+      }).map(([elementId, value]) => ({ id: elementId, editable: [...value.properties], source: { kind: 'repo', path: value.sourcePath, fingerprint: w.state.manifest[value.sourcePath].hash } })),
     };
   }
   async runJob(job: PrototypeJob, progress: (event: WorkerProgress) => void, signal?: AbortSignal): Promise<PrototypeResult> {
@@ -270,7 +290,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     let failureCheck: PrototypeResult['check'] = { compile: 'not_checked', page: 'not_checked', diagnostics: [] };
     const report = (state: WorkerProgress['state'], message: string) => {
       this.emit(w, job.id, 'phase', message, { state });
-      try { progress({ jobId: job.id, state, message: safeText(message) }); } catch { /* B reconciles durable result if its sink fails. */ }
+      try { void Promise.resolve(progress({ jobId: job.id, state, message: safeText(message) })).catch(() => {}); } catch { /* B reconciles durable result if its sink fails. */ }
     };
     const deadline = setTimeout(() => controller.abort(error('JOB_TIMEOUT', 'Job deadline exceeded.')), this.options.jobTimeoutMs ?? 180_000);
     try {
@@ -284,6 +304,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       report('running', 'Codex is editing the local project.');
       const prompt = [
         'Implement the smallest real source change requested for this local meeting workspace. You have terminal and file editing tools.',
+        'This disposable source copy is intentionally not a Git checkout. Inspect/edit files directly; C records the diff and checkpoints. Do not run Git commands.',
         'Reuse existing React components and dependencies. Do not create tests or documentation. Do not install packages, modify package manifests/lockfiles, refactor unrelated code, start servers, commit, push, deploy, or access external services.',
         'Preserve public/fork-config.json and registered data-fork IDs. Keep the current dev server working. Do not claim a mocked integration is real. If blocked, explain why.',
         `Current source/config revision: ${JSON.stringify(before)}. Relevant sources: ${JSON.stringify(job.relevantSources)}.`,
@@ -383,12 +404,12 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     const registry = w.state.project.registeredElements ?? (w.state.mode === 'blank_template' ? { 'start-button': { sourcePath: 'src/main.jsx', properties: ['size', 'background', 'label', 'radius', 'visible'] } } : {});
     const target = registry[request.patch.elementId];
     if (!target || !target.properties.includes(property as never)) throw error('UNREGISTERED_TARGET', 'Use a source job for this element/property.');
-    const source = await readFile(within(w.source, target.sourcePath), 'utf8');
-    if (!source.includes(`data-fork-id="${request.patch.elementId}"`)) throw error('STALE_TARGET', 'Registered source mapping no longer matches the element.');
     this.enter();
     let checkpointId: string | null = null;
     try {
       await this.assertCurrent(w, request.expectedRevision);
+      const source = await readFile(within(w.source, target.sourcePath), 'utf8');
+      if (!source.includes(`data-fork-id="${request.patch.elementId}"`) && !source.includes(`data-fork-id='${request.patch.elementId}'`)) throw error('STALE_TARGET', 'Registered source mapping no longer matches the element.');
       const configPath = within(w.source, 'public/fork-config.json');
       const config = await readJson<{ elements: Record<string, Record<string, unknown>> }>(configPath);
       if (!config.elements || typeof config.elements !== 'object' || Array.isArray(config.elements)) throw error('INVALID_CONFIG', 'Invalid registered component config.');
@@ -435,7 +456,9 @@ export class LocalPrototypeEngine implements PrototypeEngine {
   }
   /** Private host artifact; B must authenticate callers and never forward source contents into the iframe. */
   async getChanges(workspaceId: string, checkpointId: string): Promise<{ files: Array<{ path: string; before: string | null; after: string | null }> }> {
+    if (this.busy) throw error('WORKSPACE_BUSY', 'Wait for the active mutation before inspecting its source artifact.');
     const w = this.workspace(workspaceId); validId(checkpointId);
+    await this.assertCurrent(w, w.state.revision);
     const dir = this.file(w, `checkpoints/${checkpointId}`);
     const checkpoint = await readJson<Checkpoint>(path.join(dir, 'checkpoint.json'));
     const files = changedFiles(checkpoint.manifest, w.state.manifest);

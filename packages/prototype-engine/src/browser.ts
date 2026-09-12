@@ -9,7 +9,7 @@ export class PreviewVerifier {
     const diagnostics: string[] = [];
     let compile: BrowserEvidence['compile'] = 'passed';
     if (signal?.aborted) throw error('CANCELLED', 'Verification cancelled.');
-    this.browser ??= await chromium.launch({ headless: true, chromiumSandbox: true, executablePath: this.executablePath });
+    if (!this.browser?.isConnected()) this.browser = await chromium.launch({ headless: true, chromiumSandbox: true, executablePath: this.executablePath });
     const context = await this.browser.newContext({ serviceWorkers: 'block' });
     const page = await context.newPage();
     const abort = () => { void context.close(); };
