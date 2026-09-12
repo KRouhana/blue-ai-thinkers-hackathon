@@ -167,11 +167,33 @@ Live on this machine, Node v25.6.1:
   - `POST …/controls {kind:"undo"}` → `200`, experiment `reverted`, `revision {source:1,config:2}`,
     status `Reverted: Trying a larger Start trial button`
 
-**Not verified:** the live planner path (`FORK_PLANNER=live`) — no model credentials are present on
-this machine, so no model call has been made. The code path is implemented and unit-tested against a
-stubbed generator; it has not been run against a real model. The live engine path
-(`FORK_ENGINE=live`) is unwired by design until Track C delivers its adapter. No Slack, Codex, or
-audio integration is exercised by this track.
+**Not verified — the live planner has never been run.** There is no `.env` and no
+`OPENAI_API_KEY` / `OPENROUTER_API_KEY` on this machine, so **no model call has been made by this
+track at any point**. The path is implemented and unit-tested against a stubbed generator only.
+
+What *was* verified is that asking for something we do not have fails loudly instead of quietly
+falling back to a fixture:
+
+```
+$ npm run replay -- --planner=live
+OPENAI_API_KEY is required for the live planner. Set it in .env, or run with FORK_PLANNER=fixture.
+
+$ FORK_PLANNER=live npm run dev:api
+{"level":"error","message":"fork control api could not start",
+ "error":"OPENAI_API_KEY is required for the live planner. …"}
+
+$ FORK_ENGINE=live npm run dev:api
+{"level":"error","message":"fork control api could not start",
+ "error":"live engine adapter not wired: Track C's PrototypeEngine must be injected here by the
+  integrator (D). Use FORK_ENGINE=fake until then."}
+```
+
+To verify the live planner, put a real key in root `.env` and run
+`npm run replay -- --planner=live`. Expect a report, not a pass/fail gate: the model's choices vary
+between runs. The `pause` and `production` scenarios must still show no mutation regardless of what
+the model returns — that is the deterministic gate's job, not the planner's.
+
+No Slack, Codex, or audio integration is exercised by this track.
 
 ## Known limits
 
