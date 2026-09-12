@@ -1,12 +1,28 @@
-# Fork — Track D integration
+# Fork
 
-Fork is a silent prototyping teammate for a brainstorming session. It listens, builds a live demo of what's being discussed, and shows it — no dashboard, no manual start/pause/undo buttons to click. This checkout implements **D: the browser meeting workspace (now just the live prototype view) and adapters for A/B/C**. Slack cards exist (`apps/channel`) but are optional/off by default; the primary path is Google Meet via `apps/meet-bot`. It does not implement A’s audio capture, B’s orchestration/API, or C’s Codex prototype engine.
+Fork is a silent prototyping teammate for a brainstorming session. It listens to a meeting, turns
+what's being discussed into a small reversible demo change, and shows it — no wake word, no
+dashboard, no manual start/pause/undo buttons to click during the conversation.
 
-The requested product includes Fork participating in a video call and automatically presenting a prototype. CopilotKit Channels supplies the Slack messaging surface only; it does not establish Huddle media access, and that path remains a human screen-share. For **Google Meet**, `apps/meet-bot` joins via the third-party [Recall.ai](https://recall.ai) meeting-bot API and shows the presenter view as the bot's camera — see [apps/meet-bot/README.md](apps/meet-bot/README.md) for setup and limits (paid service, requires a public tunnel, host admission still applies, not end-to-end verified in this checkout without a live Recall account).
+It's built from four pieces that talk to each other:
 
-## Run the local fixture workspace
+- **Perception** (`packages/perception`) captures meeting audio and on-screen context.
+- **Orchestrator** (`apps/api`, `packages/orchestrator`, `packages/state`, `packages/contracts`) is
+  the control plane — it decides what should change and is the only thing allowed to schedule it.
+- **Prototype engine** (`packages/prototype-engine`) makes the change as a real local code edit and
+  serves a verified preview.
+- **Meeting UI / Slack** (`apps/meeting`, `apps/channel`, `apps/meet-bot`, `apps/preview`) shows the
+  live prototype and posts updates to Slack.
 
-Requires Node.js 22.13+ and npm. From this directory:
+```
+meeting audio + on-screen context ──▶ perception ──▶ orchestrator ──▶ prototype engine
+                                                            │                  │
+                                                            └────── live preview + Undo ──▶ meeting UI / Slack
+```
+
+## Run it (no accounts or API keys needed)
+
+Requires Node.js 22.13+ and npm.
 
 ```sh
 npm install
@@ -14,32 +30,60 @@ cp .env.example .env
 npm run dev
 ```
 
-Open **http://127.0.0.1:3000** on the local Mac. Keep `127.0.0.1` rather than substituting `localhost`: the fixture bridge uses exact origins. The launcher starts the meeting shell on port 3000 and a separate prepared preview on port 4173. Press Ctrl+C to stop both — that's the only stop control; there is no in-page button.
+Open **http://127.0.0.1:3000** (use `127.0.0.1`, not `localhost`). This starts the meeting view on
+port 3000 and a prepared preview on port 4173. Ctrl+C stops both.
 
-Fixture mode is the default and is visibly labeled. The page has no buttons: it creates a session and shows the fixture preview on load. To step through fixture events (small talk, a larger button, a color correction, simulated build/check/ready, clarification, failure) during development, open the browser console and call `forkFixture.advanceScenario()`. Reload to reset the in-memory fixture. The task board uses prepared mock data; no microphone, model, Codex worker, Google Meet, database, or deployment is involved.
+This is **fixture mode**, the default: a scripted, clearly-labeled demo with no microphone, model
+calls, or external services involved, so anyone can see the product shape immediately. The page
+loads straight into a demo session — open the browser console and call
+`forkFixture.advanceScenario()` to step through the scripted moments (small talk, a resized button,
+a color correction, a build going running → checking → ready, a clarification question, a
+failure). Reload to reset it.
 
-## Connect the teammates’ work
-
-Set `FORK_MODE=live` in `.env`, configure B’s authenticated loopback API, A’s capture adapter module, and C’s exact preview origin. The launcher can also start existing teammate npm workspaces via `FORK_API_WORKSPACE` and `FORK_PREVIEW_WORKSPACE`. Otherwise start those services separately. The same `npm run dev` command starts D.
-
-For Slack, follow [the channel setup](apps/channel/README.md). Only enable `FORK_SLACK_ENABLED=true` after managed Channels setup and B’s API are available. The default fixture session exists in one browser and is **not** a server-backed Slack session.
-
-See [integration contracts and limits](docs/INTEGRATION.md) for the proposed request bodies, event recovery, capture lifecycle, preview bridge, and unresolved Huddle requirements. A local-host link reaches the machine opening it; it is not a shared remote meeting URL. The Vite servers are local development services, not public deployment endpoints.
-
-## Verify
+To see the orchestrator run for real against the same kind of scripted input (still no model key
+needed), run it separately:
 
 ```sh
-npm run typecheck
-npm test
-npm run build
+npm run dev:api    # http://127.0.0.1:8787
+npm run replay      # replays scripted scenarios through the real ingest → plan → gate → build pipeline
 ```
 
-These checks validate D’s code and isolated integration behavior. They do not establish a real Slack reply, microphone capture, Codex run, or Huddle participation. Run the live checks in the integration guide with the teammates’ services and configured accounts before claiming a complete demo.
+## Verify it works
 
-See [the verification record](docs/VERIFICATION.md) for checks actually executed and remaining limitations.
+```sh
+npm run verify   # typecheck, then tests, then a production build
+```
 
-## Technology and provenance
+## Running it for real
 
-D uses TypeScript, Node.js, React/Vite, Zod, and native CopilotKit Channels cards. The Channels/runtime dependency pair and `@ag-ui/client` override follow the supplied **Agents, Everywhere starter** baseline; its source notes and license are preserved under [docs/starter](docs/starter/README.md). OpenAI transcription and the local Codex TypeScript SDK remain A/C responsibilities. Fork’s internal persistence belongs to B; generated demonstrations use mock data by default.
+Fixture mode never touches a microphone, a model, or the internet. To run the real thing you'd
+plug in, per piece: a model API key for the orchestrator's planner, an OpenAI + Recall.ai key pair
+for live meeting audio, and a Codex login for the prototype engine.
 
-The supplied track documents and `contracts.v2.ts` remain the team’s reference; this implementation does not rewrite colleagues’ responsibilities. [SUBMISSION.md](SUBMISSION.md) separates inherited infrastructure, prepared fixtures, new D work, and live capabilities awaiting verification.
+Joining an actual Google Meet call works like this: you give the bot the real meeting URL on the
+command line —
+
+```sh
+npm run meetbot -- --url https://meet.google.com/xxx-yyyy-zzz --presenter-url "https://<tunnel>/?session=<id>"
+```
+
+— and it joins that specific call as a guest named **Fork**, showing the live prototype as its
+camera feed (via [Recall.ai](https://recall.ai)'s meeting-bot API, since Google Meet has no public
+API for a bot to join as a real participant). **The host still has to manually admit it**, exactly
+like any unrecognized guest — there's no SSO, invite link, or bypass that lets it in
+automatically. It also needs a public HTTPS tunnel in front of the local meeting view, since
+Recall's cloud bot can't reach `127.0.0.1` directly. Optionally it can also stream the meeting's
+audio back into the transcription pipeline, with more credentials.
+
+Each piece's own README covers exactly what to set and how to check it's working:
+[`packages/perception`](packages/perception/README.md), [`apps/api`](apps/api/README.md),
+[`packages/prototype-engine`](packages/prototype-engine/README.md),
+[`apps/channel`](apps/channel/README.md), [`apps/meet-bot`](apps/meet-bot/README.md). None of these
+fall back to a fixture silently — a missing credential fails loudly instead of faking success, and
+none of this has been run end-to-end against a real Meet call or Slack workspace in this checkout.
+
+## Tech
+
+TypeScript, Node.js, React/Vite, Zod, SQLite, and CopilotKit Channels for the Slack surface.
+Transcription uses OpenAI's realtime speech-to-text; the code-editing worker uses the Codex SDK;
+joining a Google Meet call as a bot uses Recall.ai.
