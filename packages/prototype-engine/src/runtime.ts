@@ -30,6 +30,7 @@ export async function readableRuntimePaths(dependencyRoot: string): Promise<stri
   // Homebrew Node links its runtime libraries from versioned Cellar packages.
   try { paths.push(await realpath('/opt/homebrew/Cellar'), '/opt/homebrew/opt'); } catch { /* nvm/system Node does not need Homebrew. */ }
   try { paths.push(await realpath('/opt/homebrew/etc/openssl@3/openssl.cnf')); } catch { /* Optional Homebrew OpenSSL runtime configuration. */ }
+  try { paths.push(await realpath('/System/Library/OpenSSL/openssl.cnf')); } catch { /* System OpenSSL configuration used by nvm Node. */ }
   return [...new Set(await Promise.all(paths.map(p => realpath(p))))];
 }
 export function profileOverride(source: string, readable: string[]): string {

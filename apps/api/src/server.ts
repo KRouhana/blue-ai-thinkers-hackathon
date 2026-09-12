@@ -7,7 +7,7 @@ const logger = consoleLogger;
 
 async function boot(): Promise<void> {
   const env = loadEnv();
-  const { app, store, orchestrator, plannerLabel, engineLabel } = await compose(env, logger);
+  const { app, close, plannerLabel, engineLabel } = await compose(env, logger);
 
   if (env.generatedToken) {
     // Printed once so the operator can paste it into the meeting shell; a configured token is never logged.
@@ -25,18 +25,22 @@ async function boot(): Promise<void> {
   });
 
   let closing = false;
-  const shutdown = (signal: string): void => {
+  const shutdown = async (signal: string): Promise<void> => {
     if (closing) return;
     closing = true;
     logger.info('shutting down', { signal });
-    orchestrator.dispose();
-    server.close(() => {
-      store.close();
+    server.close();
+    try {
+      await close();
+      if ('closeAllConnections' in server && typeof server.closeAllConnections === 'function') server.closeAllConnections();
       process.exit(0);
-    });
+    } catch (error) {
+      logger.error('shutdown could not complete', { error: error instanceof Error ? error.message : String(error) });
+      process.exitCode = 1;
+    }
   };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => { void shutdown('SIGINT'); });
+  process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
 }
 
 boot().catch((error: unknown) => {

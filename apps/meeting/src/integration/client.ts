@@ -26,7 +26,7 @@ export function createHttpClient(base = '/api', projectConfigId = 'demo-product'
     return value;
   };
   return {
-    create: async () => snapshotSchema.parse(await request(`${base}/sessions`, { projectConfigId })),
+    create: async () => snapshotSchema.parse((await request(`${base}/sessions`, { projectConfigId }))?.snapshot),
     snapshot,
     control: async (id, control) => { await request(`${path(id)}/controls`, control); },
     capture: async (id, action) => { await request(`${path(id)}/capture`, { action, prototypeAutonomyEnabled: action === 'start' || action === 'resume' }); },

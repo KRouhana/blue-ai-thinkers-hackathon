@@ -42,6 +42,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     this.verifier = new PreviewVerifier(options.browserExecutable, options.renderTimeoutMs);
   }
   static async create(options: EngineOptions): Promise<LocalPrototypeEngine> {
+    if (options.previewPort !== undefined && (!Number.isInteger(options.previewPort) || options.previewPort < 1024 || options.previewPort > 65535)) throw error('INVALID_PORT', 'previewPort must be an integer between 1024 and 65535.');
     if (process.platform !== 'darwin') throw error('UNSUPPORTED_HOST', 'C currently supports a local Mac host.');
     if (new URL(options.hostOrigin).origin !== options.hostOrigin) throw error('INVALID_ORIGIN', 'hostOrigin must be an exact HTTP(S) origin without a path.');
     if (!/^https?:\/\//.test(options.hostOrigin)) throw error('INVALID_ORIGIN', 'Expected an HTTP(S) host origin.');
@@ -163,7 +164,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
     return changes;
   }
   private async startPreview(w: Workspace): Promise<void> {
-    const port = await new Promise<number>((resolve, reject) => {
+    const port = this.options.previewPort ?? await new Promise<number>((resolve, reject) => {
       const socket = net.createServer(); socket.once('error', reject);
       socket.listen(0, '127.0.0.1', () => { const port = (socket.address() as net.AddressInfo).port; socket.close(() => resolve(port)); });
     });
@@ -249,7 +250,10 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       this.workspaces.set(workspaceId, w);
       return this.getWorkspace(workspaceId);
     } catch (e) {
-      if (w?.server) await terminate(w.server);
+      if (w?.server) {
+        await terminate(w.server);
+        await rm(path.join(this.root, `${w.state.id}-preview.pid`), { force: true });
+      }
       throw e;
     } finally { this.busy = false; }
   }

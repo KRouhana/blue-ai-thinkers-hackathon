@@ -13,7 +13,9 @@
     "apps/*"
   ],
   "scripts": {
+    "predev": "npm run build --workspace @fork/prototype-engine && npm run build --workspace @fork/perception",
     "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "say": "node --env-file=.env scripts/say.mjs",
     "dev:api": "npm run dev --workspace api",
     "dev:meeting": "npm run dev --workspace meeting",
     "dev:slack": "npm run dev --workspace channel",

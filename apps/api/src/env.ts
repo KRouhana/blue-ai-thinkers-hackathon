@@ -26,6 +26,7 @@ const schema = z.object({
   // Must resolve outside this repo entirely (C's engine refuses a runtimeRoot inside it).
   FORK_ENGINE_RUNTIME_ROOT: z.string().default(DEFAULT_ENGINE_RUNTIME_ROOT),
   FORK_MEETING_ORIGIN: z.string().default('http://127.0.0.1:3000'),
+  FORK_PREVIEW_PORT: z.coerce.number().int().min(1024).max(65535).default(4173),
   // Operator-set only (e.g. a tunnel hostname for a real Meet demo). Empty by default: the
   // live preview stays 127.0.0.1/localhost-only unless explicitly widened for a real demo.
   FORK_PUBLIC_PREVIEW_HOSTS: z.string().default(''),
@@ -45,6 +46,7 @@ export interface ApiEnv {
   companyDocsDir: string;
   engineRuntimeRoot: string;
   meetingOrigin: string;
+  previewPort: number;
   publicPreviewHosts: string[];
 }
 
@@ -71,6 +73,7 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): ApiEnv {
     // Resolved from cwd, never from ROOT: an engine runtime root inside this repo is always invalid.
     engineRuntimeRoot: resolve(values.FORK_ENGINE_RUNTIME_ROOT),
     meetingOrigin: values.FORK_MEETING_ORIGIN,
+    previewPort: values.FORK_PREVIEW_PORT,
     publicPreviewHosts: values.FORK_PUBLIC_PREVIEW_HOSTS.split(',').map((host) => host.trim()).filter(Boolean),
   };
 }

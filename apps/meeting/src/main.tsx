@@ -48,9 +48,12 @@ function Presenter() {
       if (fixture) return;
       try {
         await client.capture(value.id, 'start');
+        const started = await client.snapshot(value.id);
+        if (cancelled) return;
+        setState(previous => ({ ...previous, snapshot: started }));
         if (!captureAdapter.available) { console.warn('[fork] No capture adapter connected (A is not wired up). Not listening.'); return; }
         const generation = ++captureGeneration.current;
-        await captureAdapter.start({ sessionId: value.id, captureEpoch: value.captureEpoch, sink: async observations => {
+        await captureAdapter.start({ sessionId: value.id, captureEpoch: started.captureEpoch, sink: async observations => {
           if (!mounted.current || captureGeneration.current !== generation) return;
           await client.observe(value.id, observations);
         } });

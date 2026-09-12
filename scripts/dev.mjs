@@ -10,7 +10,7 @@ if (mode === 'fixture') {
   // no separate preview process to start. A's real capture (Google Meet via Recall)
   // runs as its own process against a real meeting link: `npm run meetbot`, started
   // separately since it needs a meeting URL and public tunnels this launcher can't supply.
-  commands.push({ label: 'control API', args: ['run', 'dev', '--workspace', 'api'] });
+  commands.push({ label: 'control API', args: ['run', 'start', '--workspace', 'api'] });
 }
 if (process.env.FORK_SLACK_ENABLED === 'true') commands.push({ label: 'Slack', args: ['run', 'dev', '--workspace', 'channel'] });
 else console.log('[fork] Slack listener disabled. Set FORK_SLACK_ENABLED=true after managed Channels setup.');
@@ -30,7 +30,7 @@ function shutdown(code) {
   }
   const deadline = setTimeout(() => {
     for (const child of children) { try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); } }
-  }, 3000);
+  }, 45000);
   deadline.unref();
 }
 for (const command of commands) {

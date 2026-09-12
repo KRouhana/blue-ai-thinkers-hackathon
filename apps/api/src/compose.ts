@@ -16,6 +16,7 @@ export interface Composed {
   app: Hono;
   plannerLabel: 'live' | 'fixture';
   engineLabel: 'live' | 'FIXTURE';
+  close(): Promise<void>;
 }
 
 /**
@@ -33,6 +34,7 @@ async function buildLiveEngine(env: ApiEnv, projects: readonly ProjectConfig[], 
   const engine = await createPrototypeEngine({
     runtimeRoot: env.engineRuntimeRoot,
     hostOrigin: env.meetingOrigin,
+    previewPort: env.previewPort,
     projects: projects.map((project) => ({
       id: project.id,
       sourcePath: project.workspaceRoot ?? undefined,
@@ -56,6 +58,35 @@ export async function compose(env: ApiEnv, logger: Logger): Promise<Composed> {
   const store = openSqliteStore(env.dbPath);
   const projects = loadProjects(env.projectsFile);
   const engine: PrototypeEngine = env.engine === 'fake' ? new FakePrototypeEngine() : await buildLiveEngine(env, projects, logger);
+  // Refresh B's source references after every C mutation, including rollback.
+  if ('getWorkspace' in engine && typeof engine.getWorkspace === 'function') {
+    const live = engine as typeof engine & { getWorkspace(id: string): { repoMap: import('@fork/contracts').RepoMap } };
+    const owners = new Map<string, string>();
+    const prepare = engine.prepare.bind(engine);
+    engine.prepare = async request => {
+      const prepared = await prepare(request);
+      owners.set(prepared.workspaceId, request.sessionId);
+      return prepared;
+    };
+    const run = engine.runJob.bind(engine);
+    engine.runJob = async (...args) => {
+      try { return await run(...args); }
+      finally {
+        const owner = owners.get(args[0].workspaceId);
+        if (owner) store.saveRepoMap(owner, live.getWorkspace(args[0].workspaceId).repoMap);
+      }
+    };
+    // Operator-selected local session may resume after restarting the demo API.
+    const resumeId = process.env.FORK_RESUME_SESSION_ID;
+    if (resumeId) {
+      const session = store.getSession(resumeId);
+      const project = projects.find(p => p.id === session?.projectConfigId);
+      if (!session || !project) throw new Error('Resume session/project not found');
+      const prepared = await engine.prepare({ sessionId: session.id, projectConfigId: project.id, mode: project.mode });
+      store.saveRepoMap(session.id, prepared.repoMap);
+      store.updateSession(session.id, {revision: prepared.revision, previewUrl: prepared.previewUrl}, new Date().toISOString());
+    }
+  }
   const planner = buildPlanner(env, logger);
 
   const orchestrator = createOrchestrator({
@@ -76,5 +107,11 @@ export async function compose(env: ApiEnv, logger: Logger): Promise<Composed> {
     logger,
   });
 
-  return { store, orchestrator, app, plannerLabel: orchestrator.plannerLabel, engineLabel: orchestrator.engineLabel };
+  return { store, orchestrator, app, plannerLabel: orchestrator.plannerLabel, engineLabel: orchestrator.engineLabel,
+    async close() {
+      orchestrator.dispose();
+      if ('close' in engine && typeof engine.close === 'function') await engine.close();
+      store.close();
+    },
+  };
 }

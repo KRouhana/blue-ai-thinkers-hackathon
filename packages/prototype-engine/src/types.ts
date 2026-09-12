@@ -14,6 +14,8 @@ export interface EngineOptions {
   runtimeRoot: string;
   projects: ProjectConfig[];
   hostOrigin: string;
+  /** Optional fixed loopback port for a single integrated meeting. Omit for dynamic ports. */
+  previewPort?: number;
   codexPath?: string;
   codexHome?: string;
   model?: string;
