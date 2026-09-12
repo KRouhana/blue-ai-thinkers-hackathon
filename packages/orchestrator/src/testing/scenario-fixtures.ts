@@ -66,16 +66,18 @@ const BLANK: PlannerOutput = {
 type PatchKind = NonNullable<PlannerOutput['patch']>['kind'];
 type TargetBasis = NonNullable<PlannerOutput['targetEvidence']>['basis'][number];
 
-const observe = (summary: string, reason: string): PlannerOutput => ({ ...BLANK, kind: 'observe', summary, reason });
+const observe = (summary: string, reason: string, currentTopic: string | null = null): PlannerOutput =>
+  ({ ...BLANK, kind: 'observe', summary, reason, currentTopic });
 
 const patchOutput = (input: {
   summary: string; reason: string; elementId: string; kind: PatchKind;
-  value: string; basis: TargetBasis[]; explanation: string;
+  value: string; basis: TargetBasis[]; explanation: string; currentTopic?: string;
 }): PlannerOutput => ({
   ...BLANK,
   kind: 'preview_patch',
   summary: input.summary,
   reason: input.reason,
+  currentTopic: input.currentTopic ?? null,
   patch: { kind: input.kind, elementId: input.elementId, value: input.value },
   targetEvidence: { elementId: input.elementId, basis: input.basis, explanation: input.explanation },
 });
@@ -93,12 +95,13 @@ const clarifyOutput = (input: {
 
 const prototypeOutput = (input: {
   summary: string; reason: string; brief: string; relevantSourcePaths: string[];
-  constraints: string[]; mockedIntegrations: string[];
+  constraints: string[]; mockedIntegrations: string[]; currentTopic?: string;
 }): PlannerOutput => ({
   ...BLANK,
   kind: 'prototype_change',
   summary: input.summary,
   reason: input.reason,
+  currentTopic: input.currentTopic ?? null,
   prototype: {
     brief: input.brief,
     relevantSourcePaths: input.relevantSourcePaths,
@@ -115,7 +118,7 @@ const DEFINITIONS: Record<string, Definition> = {
     output: patchOutput({
       summary: 'Trying a larger Start trial button', reason: 'The current topic is the visible Start trial button.',
       elementId: 'start-trial', kind: 'set_size', value: 'lg', basis: ['explicit_label', 'recent_referent'],
-      explanation: 'The discussion names the visible Start trial button.',
+      explanation: 'The discussion names the visible Start trial button.', currentTopic: 'Start trial button',
     }),
     acceptableOutcomes: ['preview_patch_visible'],
   },
@@ -146,12 +149,12 @@ const DEFINITIONS: Record<string, Definition> = {
     preOutput: patchOutput({
       summary: 'Trying a larger Start trial button', reason: 'The topic is the visible Start trial button.',
       elementId: 'start-trial', kind: 'set_size', value: 'lg', basis: ['explicit_label'],
-      explanation: 'The discussion names the visible Start trial button.',
+      explanation: 'The discussion names the visible Start trial button.', currentTopic: 'Start trial button',
     }),
     output: patchOutput({
       summary: 'Trying a smaller Start trial button', reason: 'A correction to the size experiment that is currently visible.',
       elementId: 'start-trial', kind: 'set_size', value: 'md', basis: ['recent_referent'],
-      explanation: 'The correction refers to the size experiment just applied.',
+      explanation: 'The correction refers to the size experiment just applied.', currentTopic: 'Start trial button',
     }),
     acceptableOutcomes: ['undo_or_smaller_patch'],
   },
@@ -162,7 +165,7 @@ const DEFINITIONS: Record<string, Definition> = {
       brief: 'Add a client-side overdue-only toggle to the sample task table using the synthetic due dates.',
       relevantSourcePaths: ['src/pages/Tasks.tsx'],
       constraints: ['Use existing components', 'Keep the backend unchanged'],
-      mockedIntegrations: ['Task records and due dates are synthetic'],
+      mockedIntegrations: ['Task records and due dates are synthetic'], currentTopic: 'Sample task table',
     }),
     acceptableOutcomes: ['job_ready'],
   },
@@ -185,7 +188,7 @@ const DEFINITIONS: Record<string, Definition> = {
       brief: 'Create an operations request list showing owner and status, with an urgent-only filter, using mock requests.',
       relevantSourcePaths: [],
       constraints: ['Use the preinstalled template components', 'No backend'],
-      mockedIntegrations: ['Request records are synthetic'],
+      mockedIntegrations: ['Request records are synthetic'], currentTopic: 'Operations request list',
     }),
     acceptableOutcomes: ['job_ready'],
   },

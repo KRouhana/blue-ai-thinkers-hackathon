@@ -19,7 +19,8 @@ const textOf = (stored: StoredObservation): string => (stored.observation.kind =
 const sequenceOf = (stored: StoredObservation): number | null =>
   stored.observation.kind === 'transcript' ? stored.observation.audioTurnSequence : null;
 
-function toScreen(stored: StoredObservation | null): PlanningScreen | null {
+/** The planner-facing view of one screen snapshot; also reused when a host control cites it. */
+export function screenOf(stored: StoredObservation | null): PlanningScreen | null {
   if (!stored || stored.observation.kind !== 'preview_context') return null;
   const observation = stored.observation;
   const elements: PlanningElement[] = observation.elements.map((element) => ({
@@ -77,7 +78,7 @@ export function buildPlanningContext(input: BuildContextInput): PlanningContext 
       audioTurnSequence: sequenceOf(stored),
     })),
     recentTurns: input.recentTurns.map((stored) => ({ id: stored.observation.id, text: textOf(stored) })),
-    context: toScreen(input.context),
+    context: screenOf(input.context),
     visibleExperiments: input.experiments
       .filter((experiment) => experiment.status === 'visible')
       .map((experiment) => ({
