@@ -1,0 +1,18 @@
+{
+  "name": "@fork/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fork v2 shared application interfaces (types + runtime Zod validation). Owned by Track B.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "test:coverage": "node --import tsx --experimental-test-coverage --test-coverage-lines=80 --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  }
+}
