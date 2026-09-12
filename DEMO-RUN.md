@@ -23,3 +23,5 @@ Manual fallback: `npm run say -- "A concrete change to the prototype"` sends typ
 Limitations: this temporary demo bridge is not a production streaming service. Speech segments can split long utterances, processing has a bounded queue, and public camera refreshes can reset local interaction state. Keep the presenter open for screen context. Secrets remain in `.env`, never in Git.
 
 Speech planning waits for the current C job to finish, then gathers all pending speech against the updated revision. This prevents ordinary follow-up utterances from repeatedly cancelling and rolling back an almost-complete screen. Explicit host cancellation remains available. B also records C's resulting revision for cancelled/failed jobs because rollback advances the source revision. Whole-screen/dashboard requests must preserve their full visible scope in both planner and worker prompts.
+
+C uses low reasoning effort for interactive UI work and a ten-minute maximum job duration. The former three-minute ceiling could abort whole-screen generation before the first edit. Actual latency remains model-dependent; cancellation and rollback stay enabled.

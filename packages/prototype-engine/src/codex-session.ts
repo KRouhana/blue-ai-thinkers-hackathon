@@ -25,7 +25,7 @@ process.on('message', async (input: RunnerRequest | { cancel: true }) => {
       },
       configOverrides: [profileOverride(input.sourcePath, input.readablePaths)],
     });
-    const options = { workingDirectory: input.sourcePath, skipGitRepoCheck: true, approvalPolicy: 'never' as const, webSearchMode: 'disabled' as const, model: input.model };
+    const options = { workingDirectory: input.sourcePath, skipGitRepoCheck: true, approvalPolicy: 'never' as const, webSearchMode: 'disabled' as const, model: input.model, modelReasoningEffort: 'low' as const };
     const thread = input.threadId ? codex.resumeThread(input.threadId, options) : codex.startThread(options);
     const { events } = await thread.runStreamed(input.prompt, { signal: controller.signal });
     let completed = false;

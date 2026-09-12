@@ -296,7 +296,7 @@ export class LocalPrototypeEngine implements PrototypeEngine {
       this.emit(w, job.id, 'phase', message, { state });
       try { void Promise.resolve(progress({ jobId: job.id, state, message: safeText(message) })).catch(() => {}); } catch { /* B reconciles durable result if its sink fails. */ }
     };
-    const deadline = setTimeout(() => controller.abort(error('JOB_TIMEOUT', 'Job deadline exceeded.')), this.options.jobTimeoutMs ?? 180_000);
+    const deadline = setTimeout(() => controller.abort(error('JOB_TIMEOUT', 'Job deadline exceeded.')), this.options.jobTimeoutMs ?? 600_000);
     try {
       await this.assertCurrent(w, job.expectedRevision);
       for (const ref of job.relevantSources) {
