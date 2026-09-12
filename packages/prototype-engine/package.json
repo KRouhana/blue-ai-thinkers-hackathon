@@ -1,0 +1,25 @@
+{
+  "name": "@fork/prototype-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12" },
+  "exports": {
+    ".": { "types": "./dist/packages/prototype-engine/src/index.d.ts", "import": "./dist/packages/prototype-engine/src/index.js" },
+    "./preview": { "types": "./dist/apps/preview/src/host.d.ts", "import": "./dist/apps/preview/src/host.js" }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "local": "node dist/workers/local-builder/src/cli.js",
+    "browser:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "0.154.0",
+    "playwright": "1.63.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "vite": "7.3.6"
+  },
+  "devDependencies": { "@types/node": "^24.0.0", "typescript": "^5.9.0" }
+}

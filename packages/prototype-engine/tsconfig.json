@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "strict": true, "declaration": true, "outDir": "dist", "rootDir": "../..",
+    "lib": ["ES2022", "DOM"], "types": ["node"], "skipLibCheck": true,
+    "esModuleInterop": true, "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "../../contracts.v2.ts", "../../workers/local-builder/src/**/*.ts", "../../apps/preview/src/host.ts"]
+}
