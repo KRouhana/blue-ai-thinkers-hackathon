@@ -15,6 +15,100 @@ export interface OpenAIRealtimeTranscriberOptions {
   languages?: string[];
 }
 
+export interface OpenRouterBufferedTranscriberOptions {
+  apiKey: string;
+  model?: string;
+  fetch?: typeof globalThis.fetch;
+  /** Hard bound for raw in-memory audio held for one uncommitted speaker turn. */
+  maxSegmentMs?: number;
+}
+
+/**
+ * OpenRouter exposes speech-to-text as a request/response endpoint rather than
+ * a realtime WebSocket. This adapter keeps each short PCM turn in memory,
+ * posts it as WAV on commit, then immediately releases it. It never writes or
+ * logs raw audio and has no TTS, response, tool, or action path.
+ */
+export class OpenRouterBufferedTranscriber implements TranscriptionSession {
+  private readonly request: typeof globalThis.fetch;
+  private readonly model: string;
+  private readonly maxSegmentBytes: number;
+  private readonly listeners = new Set<(event: TranscriptionEvent) => void>();
+  private chunks: Buffer[] = [];
+  private byteLength = 0;
+  private closed = false;
+  private sequence = 0;
+
+  constructor(private readonly options: OpenRouterBufferedTranscriberOptions) {
+    if (!options.apiKey) throw new Error('OPENROUTER_API_KEY is required.');
+    if (!globalThis.fetch && !options.fetch) throw new Error('A fetch implementation is required for OpenRouter transcription.');
+    this.request = options.fetch ?? globalThis.fetch;
+    this.model = options.model ?? 'openai/gpt-transcribe';
+    const maxSegmentMs = options.maxSegmentMs ?? 30_000;
+    this.maxSegmentBytes = Math.max(24_000 * 2, Math.round((maxSegmentMs / 1_000) * 24_000 * 2));
+  }
+
+  async connect(): Promise<void> {
+    this.closed = false;
+  }
+
+  appendPcm24(audio: Int16Array): void {
+    if (this.closed || audio.byteLength === 0) return;
+    this.chunks.push(Buffer.from(audio.buffer, audio.byteOffset, audio.byteLength));
+    this.byteLength += audio.byteLength;
+    if (this.byteLength >= this.maxSegmentBytes) this.commitAudio();
+  }
+
+  commitAudio(): void {
+    if (this.closed || this.byteLength === 0) return;
+    const pcm = Buffer.concat(this.chunks, this.byteLength);
+    this.chunks = [];
+    this.byteLength = 0;
+    const itemId = `openrouter-${++this.sequence}`;
+    void this.transcribe(itemId, pcm);
+  }
+
+  subscribe(listener: (event: TranscriptionEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    this.chunks = [];
+    this.byteLength = 0;
+  }
+
+  private async transcribe(itemId: string, pcm: Buffer): Promise<void> {
+    try {
+      const response = await this.request('https://openrouter.ai/api/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          input_audio: { data: pcm24ToWav(pcm).toString('base64'), format: 'wav' },
+        }),
+      });
+      if (!response.ok) throw new Error(`OpenRouter transcription request failed (${response.status}).`);
+      const result = await response.json() as { text?: unknown };
+      if (this.closed || typeof result.text !== 'string' || !result.text.trim()) return;
+      this.emit({ type: 'completed', itemId, text: result.text, audioTurnSequence: null, orderReliable: false });
+    } catch (error) {
+      if (!this.closed) this.emit({
+        type: 'error', itemId, text: error instanceof Error ? error.message : 'OpenRouter transcription failed.',
+        audioTurnSequence: null, orderReliable: false,
+      });
+    }
+  }
+
+  private emit(event: TranscriptionEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+}
+
 /**
  * A server-owned OpenAI Realtime transcription connection. It never sends a
  * response request, TTS request, or tool call. Audio remains in memory only.
@@ -23,6 +117,8 @@ export class OpenAIRealtimeTranscriber implements TranscriptionSession {
   private socket: WebSocket | null = null;
   private closed = false;
   private ready = false;
+  private connectResolve: (() => void) | null = null;
+  private connectReject: ((error: Error) => void) | null = null;
   private sequence = 0;
   private readonly listeners = new Set<(event: TranscriptionEvent) => void>();
   private readonly itemSequences = new Map<string, number>();
@@ -45,19 +141,32 @@ export class OpenAIRealtimeTranscriber implements TranscriptionSession {
       this.socket = socket;
       const fail = (error: Error) => {
         this.socket = null;
+        this.clearConnectWaiter();
         reject(error);
       };
       socket.once('error', fail);
       socket.once('open', () => {
         socket.off('error', fail);
-        this.ready = true;
         socket.on('message', (data) => this.handleMessage(data.toString()));
-        socket.on('error', (error) => this.emitError(error.message));
+        socket.on('error', (error) => {
+          if (this.connectReject) {
+            this.connectReject(error);
+            this.clearConnectWaiter();
+          } else this.emitError(error.message);
+        });
         socket.on('close', () => {
           const wasClosedByUs = this.closed;
           this.ready = false;
-          if (!wasClosedByUs) this.emitError('OpenAI transcription connection closed unexpectedly.');
+          if (!wasClosedByUs) {
+            const error = new Error('OpenAI transcription connection closed unexpectedly.');
+            if (this.connectReject) {
+              this.connectReject(error);
+              this.clearConnectWaiter();
+            } else this.emitError(error.message);
+          }
         });
+        this.connectResolve = resolve;
+        this.connectReject = reject;
         this.send({
           type: 'session.update',
           session: {
@@ -69,16 +178,15 @@ export class OpenAIRealtimeTranscriber implements TranscriptionSession {
                   model: 'gpt-live-transcribe',
                   delay: 'low',
                   ...(this.options.prompt ? { prompt: this.options.prompt } : {}),
-                  ...(this.options.keywords?.length ? { keywords: this.options.keywords } : {}),
-                  ...(this.options.languages?.length ? { languages: this.options.languages } : {}),
-                },
-                // Recall sends a continuous meeting stream; server VAD commits turns.
-                turn_detection: { type: 'server_vad' },
+                ...(this.options.keywords?.length ? { keywords: this.options.keywords } : {}),
+                ...(this.options.languages?.length ? { languages: this.options.languages } : {}),
+              },
+                // gpt-live-transcribe requires the caller to commit turns.
+                // CaptureController commits after a bounded local silence window.
               },
             },
           },
         });
-        resolve();
       });
     });
   }
@@ -87,6 +195,11 @@ export class OpenAIRealtimeTranscriber implements TranscriptionSession {
     if (!this.ready || this.closed || audio.byteLength === 0) return;
     const bytes = Buffer.from(audio.buffer, audio.byteOffset, audio.byteLength);
     this.send({ type: 'input_audio_buffer.append', audio: bytes.toString('base64') });
+  }
+
+  commitAudio(): void {
+    if (!this.ready || this.closed) return;
+    this.send({ type: 'input_audio_buffer.commit' });
   }
 
   subscribe(listener: (event: TranscriptionEvent) => void): () => void {
@@ -121,6 +234,12 @@ export class OpenAIRealtimeTranscriber implements TranscriptionSession {
     }
     const type = typeof event.type === 'string' ? event.type : '';
     const itemId = typeof event.item_id === 'string' ? event.item_id : '';
+    if (type === 'session.updated') {
+      this.ready = true;
+      this.connectResolve?.();
+      this.clearConnectWaiter();
+      return;
+    }
     if (type === 'input_audio_buffer.committed' && itemId) {
       this.itemSequences.set(itemId, ++this.sequence);
       return;
@@ -140,8 +259,16 @@ export class OpenAIRealtimeTranscriber implements TranscriptionSession {
     }
     if (type === 'error') {
       const message = nestedErrorMessage(event) ?? 'OpenAI rejected the transcription session.';
-      this.emitError(message);
+      if (this.connectReject) {
+        this.connectReject(new Error(message));
+        this.clearConnectWaiter();
+      } else this.emitError(message);
     }
+  }
+
+  private clearConnectWaiter(): void {
+    this.connectResolve = null;
+    this.connectReject = null;
   }
 
   private orderFor(itemId: string): Pick<TranscriptionEvent, 'audioTurnSequence' | 'orderReliable'> {
@@ -296,7 +423,9 @@ export interface RecallRuntimeOptions {
   sink: ObservationSink;
   sessionId: string;
   streamId: string;
-  openAiApiKey: string;
+  openAiApiKey?: string;
+  openRouterApiKey?: string;
+  openRouterTranscriptionModel?: string;
   recallApiKey: string;
   recallVerificationSecret: string;
   publicApiBaseUrl: string;
@@ -311,6 +440,19 @@ export function createRecallRuntime(options: RecallRuntimeOptions): {
   callbackUrl: string;
 } {
   const callbackUrl = recallCallbackUrl(options.publicApiBaseUrl);
+  let createTranscriptionSession: () => TranscriptionSession;
+  if (options.openRouterApiKey) {
+    const apiKey = options.openRouterApiKey;
+    const model = options.openRouterTranscriptionModel;
+    createTranscriptionSession = () => new OpenRouterBufferedTranscriber({
+      apiKey, ...(model ? { model } : {}),
+    });
+  } else if (options.openAiApiKey) {
+    const apiKey = options.openAiApiKey;
+    createTranscriptionSession = () => new OpenAIRealtimeTranscriber({ apiKey });
+  } else {
+    createTranscriptionSession = () => { throw new Error('Set OPENROUTER_API_KEY or OPENAI_API_KEY to enable transcription.'); };
+  }
   const controller = new CaptureController({
     sessionId: options.sessionId,
     streamId: options.streamId,
@@ -321,7 +463,7 @@ export function createRecallRuntime(options: RecallRuntimeOptions): {
       ...(options.recallRegion ? { region: options.recallRegion } : {}),
     }),
     callbackUrl,
-    createTranscriptionSession: () => new OpenAIRealtimeTranscriber({ apiKey: options.openAiApiKey }),
+    createTranscriptionSession,
     ...options.controller,
   });
   const receiver = createRecallAudioReceiver({
@@ -330,6 +472,24 @@ export function createRecallRuntime(options: RecallRuntimeOptions): {
     verificationSecret: options.recallVerificationSecret,
   });
   return { controller, receiver, callbackUrl };
+}
+
+function pcm24ToWav(pcm: Buffer): Buffer {
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + pcm.byteLength, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(24_000, 24);
+  header.writeUInt32LE(24_000 * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(pcm.byteLength, 40);
+  return Buffer.concat([header, pcm]);
 }
 
 export function recallCallbackUrl(publicApiBaseUrl: string): string {

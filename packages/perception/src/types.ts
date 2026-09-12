@@ -29,6 +29,8 @@ export interface TranscriptionEvent {
 export interface TranscriptionSession {
   connect(): Promise<void>;
   appendPcm24(audio: Int16Array): void;
+  /** Finalize the current input turn when the source detects a speech pause. */
+  commitAudio?(): void;
   subscribe(listener: (event: TranscriptionEvent) => void): () => void;
   close(): Promise<void>;
 }

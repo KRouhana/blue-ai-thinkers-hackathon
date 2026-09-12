@@ -5,6 +5,7 @@ import type { TranscriptionEvent, TranscriptionSession } from './types.js';
 export class FixtureTranscriptionSession implements TranscriptionSession {
   private readonly listeners = new Set<(event: TranscriptionEvent) => void>();
   readonly appendedAudio: Int16Array[] = [];
+  commits = 0;
   connected = false;
   closed = false;
 
@@ -14,6 +15,10 @@ export class FixtureTranscriptionSession implements TranscriptionSession {
 
   appendPcm24(audio: Int16Array): void {
     this.appendedAudio.push(audio);
+  }
+
+  commitAudio(): void {
+    this.commits += 1;
   }
 
   subscribe(listener: (event: TranscriptionEvent) => void): () => void {

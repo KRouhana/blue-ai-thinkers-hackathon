@@ -47,6 +47,11 @@ async function refreshStatus(): Promise<void> {
 function renderStatus(status: CaptureStatus & Partial<{ sessionId: string; workspaceId: string }>): void {
   latestStatus = status.sessionId && status.workspaceId ? status as typeof latestStatus : latestStatus;
   statusElement.textContent = `Source: ${status.source} · Status: ${status.state}${status.message ? ` — ${status.message}` : ''}`;
+  required<HTMLButtonElement>('[data-action="start"]').disabled = status.state !== 'stopped' && status.state !== 'error';
+  required<HTMLButtonElement>('[data-action="pause"]').disabled = status.state !== 'listening';
+  required<HTMLButtonElement>('[data-action="resume"]').disabled = status.state !== 'paused';
+  required<HTMLButtonElement>('[data-action="stop"]').disabled = status.state === 'stopped' || status.state === 'stopping';
+  meetingInput.disabled = status.state !== 'stopped' && status.state !== 'error';
   configurePreview();
 }
 

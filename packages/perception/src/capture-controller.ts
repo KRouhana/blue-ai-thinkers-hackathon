@@ -32,6 +32,9 @@ export class CaptureController {
   private serial: Promise<void> = Promise.resolve();
   /** Old Recall packets are discarded after a resume even if they arrive late. */
   private acceptAudioAfter: Date | null = null;
+  /** Recall sends 200 ms PCM packets. Commit after a natural 800 ms pause. */
+  private speechActive = false;
+  private silenceMs = 0;
 
   constructor(private readonly options: CaptureControllerOptions) {
     this.now = options.now ?? (() => new Date());
@@ -85,6 +88,7 @@ export class CaptureController {
       this.captions.clear();
       this.finalized.clear();
       this.resampler.reset();
+      this.resetLocalTurnDetection();
       this.acceptAudioAfter = this.now();
       this.setStatus({ state: 'starting', captureEpoch, message: 'Connecting transcription…' });
 
@@ -101,7 +105,7 @@ export class CaptureController {
           state: 'listening',
           captureEpoch,
           botId: this.bot?.id ?? null,
-          message: this.bot ? 'Fork is waiting to be admitted to Google Meet.' : 'Listening.',
+          message: this.bot ? 'Fork is joining Google Meet. Admit it if prompted.' : 'Listening.',
         });
       } catch (error) {
         await this.closeTranscription();
@@ -118,6 +122,7 @@ export class CaptureController {
       this.acceptAudioAfter = null;
       await this.closeTranscription();
       this.resampler.reset();
+      this.resetLocalTurnDetection();
     });
   }
 
@@ -130,6 +135,7 @@ export class CaptureController {
       this.captions.clear();
       this.finalized.clear();
       this.resampler.reset();
+      this.resetLocalTurnDetection();
       this.acceptAudioAfter = this.now();
       this.setStatus({ state: 'starting', captureEpoch, botId: this.bot?.id ?? null, message: 'Resuming a new capture epoch…' });
       try {
@@ -150,6 +156,7 @@ export class CaptureController {
       // State changes before teardown, so no late callback can be accepted.
       await this.closeTranscription();
       this.resampler.reset();
+      this.resetLocalTurnDetection();
       this.acceptAudioAfter = null;
       const bot = this.bot;
       this.bot = null;
@@ -167,8 +174,12 @@ export class CaptureController {
   ingestRecallPcm16(audio: Int16Array, capturedAt?: Date): void {
     if (this.status.state !== 'listening' || !this.transcription) return;
     if (capturedAt && this.acceptAudioAfter && capturedAt < this.acceptAudioAfter) return;
+    if (this.bot && this.status.message !== 'Listening to Google Meet audio.') {
+      this.setStatus({ state: 'listening', message: 'Listening to Google Meet audio.' });
+    }
     const resampled = this.resampler.convert(audio);
     if (resampled.length > 0) this.transcription.appendPcm24(resampled);
+    this.updateLocalTurnDetection(audio);
   }
 
   /** Explicit developer-only fallback; it never impersonates or replaces live speech. */
@@ -258,6 +269,32 @@ export class CaptureController {
     for (const listener of this.captionListeners) listener(captions);
   }
 
+  /**
+   * gpt-live-transcribe rejects server-side VAD configuration. Recall supplies
+   * bounded PCM chunks, so an in-memory energy gate gives it explicit turns
+   * without retaining any audio or triggering a response.
+   */
+  private updateLocalTurnDetection(audio: Int16Array): void {
+    if (!this.transcription?.commitAudio) return;
+    const durationMs = Math.round((audio.length / 16_000) * 1_000);
+    if (hasSpeechEnergy(audio)) {
+      this.speechActive = true;
+      this.silenceMs = 0;
+      return;
+    }
+    if (!this.speechActive) return;
+    this.silenceMs += durationMs;
+    if (this.silenceMs >= 800) {
+      this.transcription.commitAudio();
+      this.resetLocalTurnDetection();
+    }
+  }
+
+  private resetLocalTurnDetection(): void {
+    this.speechActive = false;
+    this.silenceMs = 0;
+  }
+
   private enqueue(operation: () => Promise<void>): Promise<void> {
     const result = this.serial.then(operation, operation);
     this.serial = result.catch(() => undefined);
@@ -267,4 +304,12 @@ export class CaptureController {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'An unknown capture error occurred.';
+}
+
+function hasSpeechEnergy(audio: Int16Array): boolean {
+  if (audio.length === 0) return false;
+  let sum = 0;
+  for (const sample of audio) sum += Math.abs(sample);
+  // Roughly 1% full-scale; deliberately conservative for Meet background noise.
+  return sum / audio.length >= 320;
 }

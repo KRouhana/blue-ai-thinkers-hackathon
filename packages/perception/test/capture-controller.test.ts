@@ -47,6 +47,26 @@ test('emits only finalized transcripts, suppresses duplicates, and rejects old e
   assert.equal(observations.length, 2);
 });
 
+test('commits a live audio turn after a bounded local silence window', async () => {
+  const sessions: FixtureTranscriptionSession[] = [];
+  const { sink } = recordingSink();
+  const controller = new CaptureController({
+    sessionId: 'session-a',
+    streamId: 'meet-audio',
+    sink,
+    createTranscriptionSession: () => {
+      const session = new FixtureTranscriptionSession();
+      sessions.push(session);
+      return session;
+    },
+  });
+
+  await controller.start();
+  controller.ingestRecallPcm16(new Int16Array(3_200).fill(1_000));
+  for (let index = 0; index < 4; index += 1) controller.ingestRecallPcm16(new Int16Array(3_200));
+  assert.equal(sessions[0]?.commits, 1);
+});
+
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }

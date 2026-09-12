@@ -1,35 +1,38 @@
 /**
  * Recall's mixed raw stream is 16 kHz signed 16-bit mono PCM. OpenAI's live
  * transcription examples use 24 kHz PCM, so this deterministic 3:2 upsampler
- * produces [a, midpoint(a,b), b] for every input pair. It holds one odd sample
- * between messages to avoid a discontinuity at packet boundaries.
+ * produces samples at the exact 3:2 time positions using linear interpolation.
+ * It preserves the two unconsumed samples between messages, so no boundary
+ * discontinuity or time compression is introduced.
  */
 export class Pcm16To24kResampler {
-  private pending: number | null = null;
+  private pending: number[] = [];
 
   convert(chunk: Int16Array): Int16Array {
     if (chunk.length === 0) return new Int16Array(0);
 
-    const input = this.pending === null
-      ? chunk
-      : Int16Array.from([this.pending, ...chunk]);
-    const usableLength = input.length - (input.length % 2);
-    this.pending = usableLength === input.length ? null : input[input.length - 1] ?? null;
-
-    const output = new Int16Array((usableLength / 2) * 3);
-    let outputIndex = 0;
-    for (let inputIndex = 0; inputIndex < usableLength; inputIndex += 2) {
+    const input = [...this.pending, ...chunk];
+    const output: number[] = [];
+    let inputIndex = 0;
+    // Output positions are 0, 2/3, 4/3 source samples for each two inputs.
+    // The final source sample is retained as look-ahead for the next packet.
+    while (inputIndex + 2 < input.length) {
       const first = input[inputIndex] ?? 0;
       const second = input[inputIndex + 1] ?? 0;
-      output[outputIndex++] = first;
-      output[outputIndex++] = Math.round((first + second) / 2);
-      output[outputIndex++] = second;
+      const third = input[inputIndex + 2] ?? 0;
+      output.push(
+        first,
+        Math.round((first + 2 * second) / 3),
+        Math.round((2 * second + third) / 3),
+      );
+      inputIndex += 2;
     }
-    return output;
+    this.pending = input.slice(inputIndex);
+    return Int16Array.from(output);
   }
 
   reset(): void {
-    this.pending = null;
+    this.pending = [];
   }
 }
 
